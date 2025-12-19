@@ -220,6 +220,7 @@ const Sidebar = () => {
 
   const [deleteConfirm, setDeleteConfirm] = useState(null); // ID of file pending deletion confirmation
   const [isRestoring, setIsRestoring] = useState(true); // Track initial data loading
+  const [restoreError, setRestoreError] = useState(null); // Track loading errors
 
   // Sync Pothole Files to Map Layer
   useEffect(() => {
@@ -354,6 +355,7 @@ const Sidebar = () => {
 
       } catch (err) {
         console.error("Failed to restore session:", err);
+        setRestoreError('Failed to load data. Server may be starting up. Please try again.');
       } finally {
         setIsRestoring(false);
       }
@@ -361,6 +363,14 @@ const Sidebar = () => {
 
     restoreSession();
   }, []);
+
+  // Retry loading data
+  const handleRetryLoad = () => {
+    setIsRestoring(true);
+    setRestoreError(null);
+    // Trigger page reload to restart the restore process
+    window.location.reload();
+  };
 
   const handleDeleteIri = async (id, e) => {
     e.stopPropagation();
@@ -543,6 +553,19 @@ const Sidebar = () => {
             <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mb-2"></div>
             <p className="text-sm font-medium text-blue-800">Loading your data...</p>
             <p className="text-xs text-blue-600 mt-1">This may take a moment on first load</p>
+          </div>
+        )}
+
+        {/* Error with Retry */}
+        {!isRestoring && restoreError && (
+          <div className="mb-6 bg-amber-100 border border-amber-300 rounded-lg p-4 text-center">
+            <p className="text-sm font-medium text-amber-800">⚠️ {restoreError}</p>
+            <button
+              onClick={handleRetryLoad}
+              className="mt-3 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-4 py-2 rounded transition-colors"
+            >
+              Retry Loading
+            </button>
           </div>
         )}
 
