@@ -41,25 +41,14 @@ async def process_vehicle_data(
     """
     Process a vehicle detection CSV file and return map-ready data.
     Uses caching for fast repeat requests.
-    - Admins: Can only process their own files
-    - Users: Can process ANY file (shared read-only access)
+    - All users can view shared data (read-only for non-admins)
     """
-    # Find the file in the database
-    if current_user.is_admin:
-        # Admins see only their own files
-        upload_record = db.query(UploadModel).filter(
-            UploadModel.user_id == current_user.id,
-            UploadModel.category == 'vehicle',
-            UploadModel.file_type == 'csv',
-            (UploadModel.filename == filename) | (UploadModel.original_filename == filename)
-        ).order_by(UploadModel.upload_date.desc()).first()
-    else:
-        # Regular users can see ANY file (shared data)
-        upload_record = db.query(UploadModel).filter(
-            UploadModel.category == 'vehicle',
-            UploadModel.file_type == 'csv',
-            (UploadModel.filename == filename) | (UploadModel.original_filename == filename)
-        ).order_by(UploadModel.upload_date.desc()).first()
+    # Find the file in the database - ALL users see shared data
+    upload_record = db.query(UploadModel).filter(
+        UploadModel.category == 'vehicle',
+        UploadModel.file_type == 'csv',
+        (UploadModel.filename == filename) | (UploadModel.original_filename == filename)
+    ).order_by(UploadModel.upload_date.desc()).first()
 
     if not upload_record:
         raise HTTPException(status_code=404, detail=f"File not found: {filename}")

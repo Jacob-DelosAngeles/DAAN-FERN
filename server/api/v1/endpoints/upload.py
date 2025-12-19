@@ -282,17 +282,11 @@ async def list_uploaded_files(
     db: Session = Depends(get_db)
 ):
     """
-    List files.
-    - Admins/Superusers: See their own uploaded files
-    - Regular users: See ALL files (shared read-only access)
+    List all files (shared data model).
+    All authenticated users see all files.
     """
     try:
-        if current_user.is_admin:
-            # Admins see their own files
-            uploads = db.query(UploadModel).filter(UploadModel.user_id == current_user.id).all()
-        else:
-            # Regular users see ALL files (shared data model)
-            uploads = db.query(UploadModel).all()
+        uploads = db.query(UploadModel).all()
         
         return {
             "success": True,
@@ -309,22 +303,13 @@ async def list_files_by_category(
     db: Session = Depends(get_db)
 ):
     """
-    List files by category.
-    - Admins/Superusers: See their own uploaded files
-    - Regular users: See ALL files in this category (shared read-only access)
+    List files by category (shared data model).
+    All authenticated users see all files in this category.
     """
     try:
-        if current_user.is_admin:
-            # Admins see their own files
-            uploads = db.query(UploadModel).filter(
-                UploadModel.user_id == current_user.id,
-                UploadModel.category == category
-            ).all()
-        else:
-            # Regular users see ALL files in this category
-            uploads = db.query(UploadModel).filter(
-                UploadModel.category == category
-            ).all()
+        uploads = db.query(UploadModel).filter(
+            UploadModel.category == category
+        ).all()
         
         return {
             "success": True,

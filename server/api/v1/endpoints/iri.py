@@ -28,34 +28,22 @@ async def compute_iri(
     db: Session = Depends(get_db)
 ):
     """
-    Compute IRI values for an uploaded file
+    Compute IRI values for an uploaded file.
+    - All users can view shared data (read-only for non-admins)
     """
     try:
-        # 1. Try to find the file in the database for the current user
+        # 1. Find the file in the database - ALL users see shared data
         upload_record = db.query(UploadModel).filter(
-            UploadModel.user_id == current_user.id,
-            (UploadModel.file_type == 'csv'), # Optimization
+            UploadModel.file_type == 'csv',
             (UploadModel.filename == filename) | (UploadModel.original_filename == filename)
         ).order_by(UploadModel.upload_date.desc()).first()
 
-        if upload_record:
-             # Use storage path from DB
-             # If we have a record, we trust this path. If it fails, we want to know why (500), not hide it as 404.
-             storage_path = upload_record.storage_path
-             content_bytes = file_handler.storage.get_file_content(storage_path)
-        else:
-             # Fallback: assume filename is the path or try to construct it
-             storage_path = filename
-             try:
-                 content_bytes = file_handler.storage.get_file_content(storage_path)
-             except Exception:
-                 # Try constructing path if first attempt failed and it's R2 (user_id/iri/filename)
-                 try:
-                     alt_path = f"{current_user.id}/iri/{filename}"
-                     content_bytes = file_handler.storage.get_file_content(alt_path)
-                 except Exception:
-                     # Raise 404 if truly not found
-                     raise HTTPException(status_code=404, detail=f"File not found in storage: {filename}")
+        if not upload_record:
+            raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+
+        # Use storage path from DB record
+        storage_path = upload_record.storage_path
+        content_bytes = file_handler.storage.get_file_content(storage_path)
 
         file_obj = BytesIO(content_bytes)
         
