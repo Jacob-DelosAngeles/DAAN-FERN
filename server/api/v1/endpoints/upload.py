@@ -2,6 +2,9 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from typing import List
 from sqlalchemy.orm import Session
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 from models.iri_models import FileUploadResponse, ErrorResponse
 from models.upload import UploadModel, PotholeImageModel, Upload, UploadCreate
@@ -40,7 +43,15 @@ async def upload_files(
     Upload multiple files (CSV and/or images).
     type: 'iri', 'pothole', or 'vehicle'
     Files are saved to user-specific storage and tracked in database.
+    Requires admin or superuser role.
     """
+    # Role check: Only admins and superusers can upload
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only admins can upload files. Contact your superuser for access."
+        )
+    
     results = []
     pothole_csv_upload_id = None  # Track CSV upload for linking images
     
@@ -267,10 +278,18 @@ async def list_uploaded_files(
     db: Session = Depends(get_db)
 ):
     """
-    List all files uploaded by the current user
+    List files.
+    - Admins/Superusers: See their own uploaded files
+    - Regular users: See ALL files (shared read-only access)
     """
     try:
-        uploads = db.query(UploadModel).filter(UploadModel.user_id == current_user.id).all()
+        if current_user.is_admin:
+            # Admins see their own files
+            uploads = db.query(UploadModel).filter(UploadModel.user_id == current_user.id).all()
+        else:
+            # Regular users see ALL files (shared data model)
+            uploads = db.query(UploadModel).all()
+        
         return {
             "success": True,
             "files": uploads,
@@ -286,13 +305,23 @@ async def list_files_by_category(
     db: Session = Depends(get_db)
 ):
     """
-    List files by category for the current user
+    List files by category.
+    - Admins/Superusers: See their own uploaded files
+    - Regular users: See ALL files in this category (shared read-only access)
     """
     try:
-        uploads = db.query(UploadModel).filter(
-            UploadModel.user_id == current_user.id,
-            UploadModel.category == category
-        ).all()
+        if current_user.is_admin:
+            # Admins see their own files
+            uploads = db.query(UploadModel).filter(
+                UploadModel.user_id == current_user.id,
+                UploadModel.category == category
+            ).all()
+        else:
+            # Regular users see ALL files in this category
+            uploads = db.query(UploadModel).filter(
+                UploadModel.category == category
+            ).all()
+        
         return {
             "success": True,
             "category": category,
@@ -309,8 +338,15 @@ async def delete_upload(
     db: Session = Depends(get_db)
 ):
     """
-    Delete a specific upload (only if it belongs to the current user)
+    Delete a specific upload. Requires admin or superuser role.
     """
+    # Role check: Only admins and superusers can delete
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only admins can delete files."
+        )
+    
     try:
         # Find the upload
         upload = db.query(UploadModel).filter(
@@ -333,7 +369,7 @@ async def delete_upload(
                 if 'image_path' in df.columns:
                     image_filenames = df['image_path'].dropna().unique().tolist()
                     if image_filenames:
-                        print(f"DEBUG: Found {len(image_filenames)} images to cascade delete.")
+                        logger.debug(f"Found {len(image_filenames)} images to cascade delete.")
                         
                         # 3. Find UploadModel records for these images
                         # We match by original_filename because R2 filenames are UUIDs
@@ -352,14 +388,14 @@ async def delete_upload(
                                 db.delete(img_upload)
                                 db.commit() # Force commit immediately
                             except Exception as e:
-                                print(f"Error cascading delete for {img_upload.filename}: {e}")
+                                logger.warning(f"Error cascading delete for {img_upload.filename}: {e}")
                                 # Continue deleting others even if one fails
                         
-                        print(f"DEBUG: Cascade deleted {len(images_to_delete)} image records.")
+                        logger.debug(f"Cascade deleted {len(images_to_delete)} image records.")
                         
             except Exception as e:
                 # Log error but don't stop the main deletion
-                print(f"Warning: Smart deletion logic failed: {e}")
+                logger.warning(f"Smart deletion logic failed: {e}")
 
         # Delete from storage
         await file_handler.delete_file_async(upload.storage_path)

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from core import security
 from core.config import settings
 from core.database import get_db
-from models.user import Token, User, UserCreate, UserModel
+from models.user import Token, User, UserCreate, UserModel, VALID_ROLES
 from jose import jwt, JWTError
 
 router = APIRouter()
@@ -28,7 +28,7 @@ def login_access_token(
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return {
         "access_token": security.create_access_token(
-            user.email, is_superuser=user.is_superuser, expires_delta=access_token_expires
+            user.email, role=user.role, expires_delta=access_token_expires
         ),
         "token_type": "bearer",
     }
@@ -39,7 +39,8 @@ def register_user(
     db: Session = Depends(get_db)
 ) -> Any:
     """
-    Create new user without the need to be logged in
+    Create new user without the need to be logged in.
+    Note: New users are always registered as regular users for security.
     """
     user = db.query(UserModel).filter(UserModel.email == user_in.email).first()
     if user:
@@ -53,8 +54,8 @@ def register_user(
         email=user_in.email,
         hashed_password=hashed_password,
         full_name=user_in.full_name,
-        is_active=user_in.is_active,
-        is_superuser=user_in.is_superuser,
+        is_active=True,
+        role="user",  # SECURITY: New users always start as regular users
     )
     db.add(db_user)
     db.commit()
@@ -65,37 +66,61 @@ def register_user(
 def read_users(
     skip: int = 0, 
     limit: int = 100, 
+    current_user: UserModel = Depends(security.get_current_user),
     db: Session = Depends(get_db)
 ) -> Any:
     """
-    Retrieve all users (Admin only - simplified for demo)
+    Retrieve all users (Superuser only)
     """
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized. Superuser access required."
+        )
     users = db.query(UserModel).offset(skip).limit(limit).all()
     return users
 
 @router.put("/users/{user_id}/role", response_model=User)
 def update_user_role(
     user_id: int,
-    is_superuser: bool,
+    role: str,
     current_user: UserModel = Depends(security.get_current_user),
     db: Session = Depends(get_db)
 ) -> Any:
     """
-    Update user role (Admin only)
+    Update user role (Superuser only).
+    Roles: 'admin' (can upload/manage data), 'user' (read-only).
+    Note: Only superusers can promote users to admin or demote admins to user.
+    Superuser role cannot be assigned via this endpoint.
     """
     if not current_user.is_superuser:
         raise HTTPException(
-            status_code=400, detail="The user doesn't have enough privileges"
+            status_code=403, 
+            detail="Only superusers can manage user roles."
+        )
+    
+    # Validate role value
+    if role not in ["admin", "user"]:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid role. Allowed roles: admin, user"
         )
     
     user = db.query(UserModel).filter(UserModel.id == user_id).first()
     if not user:
         raise HTTPException(
             status_code=404,
-            detail="The user with this id does not exist in the system",
+            detail="User not found.",
         )
     
-    user.is_superuser = is_superuser
+    # Prevent superusers from being demoted (including self)
+    if user.role == "superuser":
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot change the role of a superuser."
+        )
+    
+    user.role = role
     db.commit()
     db.refresh(user)
     return user

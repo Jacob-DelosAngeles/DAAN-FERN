@@ -2,7 +2,10 @@ from sqlalchemy import Boolean, Column, Integer, String
 from sqlalchemy.orm import relationship
 from core.database import Base
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, Literal
+
+# Valid roles in the system
+VALID_ROLES = ["superuser", "admin", "user"]
 
 # SQLAlchemy Model
 class UserModel(Base):
@@ -13,7 +16,17 @@ class UserModel(Base):
     full_name = Column(String, index=True)
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
-    is_superuser = Column(Boolean, default=False)
+    # Role field: "superuser" (owner), "admin" (can upload), "user" (read-only)
+    role = Column(String, default="user")
+    
+    # Backwards compatibility property
+    @property
+    def is_superuser(self) -> bool:
+        return self.role == "superuser"
+    
+    @property
+    def is_admin(self) -> bool:
+        return self.role in ["superuser", "admin"]
     
     # Relationships
     uploads = relationship("UploadModel", back_populates="user", cascade="all, delete-orphan")
@@ -23,13 +36,18 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: Optional[str] = None
     is_active: bool = True
-    is_superuser: bool = False
+    role: str = "user"
 
 class UserCreate(UserBase):
     password: str
 
 class User(UserBase):
     id: int
+    
+    # Computed field for backwards compatibility
+    @property
+    def is_superuser(self) -> bool:
+        return self.role == "superuser"
     
     class Config:
         from_attributes = True

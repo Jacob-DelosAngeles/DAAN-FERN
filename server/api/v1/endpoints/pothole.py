@@ -4,6 +4,9 @@ import pandas as pd
 import os
 from pathlib import Path
 import math
+import logging
+
+logger = logging.getLogger(__name__)
 from core.config import settings
 from utils.file_handler import FileHandler
 
@@ -26,29 +29,31 @@ async def process_pothole_data(
     """
     Process an uploaded pothole detection CSV file.
     Returns a list of pothole markers with popup HTML.
+    - Admins: Can only process their own files
+    - Users: Can process ANY file (shared read-only access)
     """
-    # 1. Try to find the file in the database for the current user
-    upload_record = db.query(UploadModel).filter(
-        UploadModel.user_id == current_user.id,
-        (UploadModel.category == 'pothole'), 
-        (UploadModel.file_type == 'csv'),
-        (UploadModel.filename == filename) | (UploadModel.original_filename == filename)
-    ).order_by(UploadModel.upload_date.desc()).first()
-
-    if not upload_record:
-         # Fallback to legacy check if no record found (though for fresh DB this matters less)
-         # We might want to construct a path or search? 
-         # Given the error is "File not found: pothole_detections.csv", the user likely uploaded it via the UI
-         # and it should have a record.
-         pass
+    # Find the file in the database
+    if current_user.is_admin:
+        # Admins see only their own files
+        upload_record = db.query(UploadModel).filter(
+            UploadModel.user_id == current_user.id,
+            UploadModel.category == 'pothole', 
+            UploadModel.file_type == 'csv',
+            (UploadModel.filename == filename) | (UploadModel.original_filename == filename)
+        ).order_by(UploadModel.upload_date.desc()).first()
+    else:
+        # Regular users can see ANY file (shared data)
+        upload_record = db.query(UploadModel).filter(
+            UploadModel.category == 'pothole', 
+            UploadModel.file_type == 'csv',
+            (UploadModel.filename == filename) | (UploadModel.original_filename == filename)
+        ).order_by(UploadModel.upload_date.desc()).first()
     
     try:
         if upload_record:
              # Use the storage path from the record
              path_to_read = upload_record.storage_path
         else:
-             # Fallback attempt if we can guess the path or if filename is the path (legacy)
-             # But with R2, filename isn't enough without directory structure.
              raise HTTPException(status_code=404, detail=f"File record not found for: {filename}")
 
         # Get content using storage service (works for Local and R2)
@@ -63,10 +68,11 @@ async def process_pothole_data(
         if missing_cols:
             raise HTTPException(status_code=400, detail=f"Missing columns: {missing_cols}")
         
-        # 2. Fetch all pothole image records for this user to create a filename -> storage_path map
-        # This is necessary because files in R2 are renamed to UUIDs, but the CSV contains original filenames.
+        # 2. Fetch all pothole image records to create a filename -> storage_path map
+        # For shared data model, we need images from the same user who uploaded the CSV
+        file_owner_id = upload_record.user_id
         image_records = db.query(UploadModel).filter(
-            UploadModel.user_id == current_user.id,
+            UploadModel.user_id == file_owner_id,
             UploadModel.category == 'pothole',
             UploadModel.file_type.in_(['jpg', 'jpeg', 'png']) 
         ).all()
@@ -94,11 +100,8 @@ async def process_pothole_data(
                     storage_key = image_map[image_path]
                     image_url = f"{settings.R2_PUBLIC_URL}/{storage_key}"
                 else:
-                    # Fallback: maybe it wasn't renamed or missing? 
-                    # Try constructing it assuming standard renamed path if we can (impossible with random UUID)
-                    # For now, default to the constructed guess, but it likely 404s
-                    # Or check if image_path already looks like a path?
-                    full_image_key = f"{current_user.id}/pothole/{image_path}"
+                    # Fallback: construct URL from file owner's path
+                    full_image_key = f"{file_owner_id}/pothole/{image_path}"
                     image_url = f"{settings.R2_PUBLIC_URL}/{full_image_key}"
                 
                 # Create popup HTML (mirrored from streamlit_app.py)
@@ -138,7 +141,7 @@ async def process_pothole_data(
                     'id': idx
                 })
             except Exception as e:
-                print(f"Error processing row {idx}: {e}")
+                logger.debug(f"Error processing pothole row {idx}: {e}")
                 continue
                 
         return {

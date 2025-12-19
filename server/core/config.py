@@ -30,7 +30,7 @@ class Settings:
     R2_SECRET_ACCESS_KEY: str = os.getenv("R2_SECRET_ACCESS_KEY", "")
     R2_BUCKET_NAME: str = os.getenv("R2_BUCKET_NAME", "daan-bucket")
     R2_ENDPOINT_URL: str = os.getenv("R2_ENDPOINT_URL", "")
-    R2_PUBLIC_URL: str = os.getenv("R2_PUBLIC_URL", "https://pub-3acbf94b790d4e7cb2e8bed9bf68f024.r2.dev")
+    R2_PUBLIC_URL: str = os.getenv("R2_PUBLIC_URL", "")  # Required in production
     
     API_V1_STR: str = "/api/v1"
 

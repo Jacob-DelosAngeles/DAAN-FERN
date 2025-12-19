@@ -1,6 +1,7 @@
 import os
 import shutil
 import boto3
+import logging
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any
 from pathlib import Path
@@ -8,6 +9,8 @@ from fastapi import UploadFile, HTTPException
 import uuid
 import aiofiles
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 class StorageService(ABC):
     @abstractmethod
@@ -167,7 +170,7 @@ class R2StorageService(StorageService):
             self.s3_client.delete_object(Bucket=self.bucket_name, Key=file_path)
             return True
         except Exception as e:
-            print(f"DEBUG R2: Error deleting '{file_path}': {e}")
+            logger.warning(f"R2: Error deleting '{file_path}': {e}")
             return False
 
     def get_file_url(self, file_path: str) -> str:
@@ -210,11 +213,11 @@ class R2StorageService(StorageService):
 
     def get_file_content(self, file_path: str) -> bytes:
         try:
-            print(f"DEBUG R2: Fetching Key='{file_path}' from Bucket='{self.bucket_name}'")
+            logger.debug(f"R2: Fetching Key='{file_path}' from Bucket='{self.bucket_name}'")
             response = self.s3_client.get_object(Bucket=self.bucket_name, Key=file_path)
             return response['Body'].read()
         except Exception as e:
-            print(f"DEBUG R2: Failed to fetch '{file_path}': {e}")
+            logger.error(f"R2: Failed to fetch '{file_path}': {e}")
             raise HTTPException(status_code=500, detail=f"Error retrieving file from R2: {str(e)}")
 
 def get_storage_service() -> StorageService:
