@@ -56,8 +56,8 @@ export const authService = {
         const response = await api.get('/auth/users');
         return response.data;
     },
-    updateUserRole: async (userId, isSuperuser) => {
-        const response = await api.put(`/auth/users/${userId}/role?is_superuser=${isSuperuser}`);
+    updateUserRole: async (userId, role) => {
+        const response = await api.put(`/auth/users/${userId}/role?role=${role}`);
         return response.data;
     },
 };
