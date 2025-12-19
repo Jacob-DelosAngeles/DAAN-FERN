@@ -1,0 +1,20 @@
+# Server
+server/venv/
+server/.env
+server/__pycache__/
+server/**/__pycache__/
+server/uploads/
+server/*.db
+
+# Client
+client/node_modules/
+client/dist/
+client/.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
