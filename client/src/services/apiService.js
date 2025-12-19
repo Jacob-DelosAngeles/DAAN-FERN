@@ -81,7 +81,7 @@ class ApiService {
     return await response.json();
   }
 
-  // Compute IRI
+  // Compute IRI (legacy - heavy processing)
   async computeIRI(filename, options = {}) {
     const params = new URLSearchParams();
 
@@ -91,11 +91,37 @@ class ApiService {
     const queryString = params.toString();
     const url = `${API_BASE_URL}/v1/iri/compute/${filename}${queryString ? `?${queryString}` : ''}`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...this.getAuthHeaders(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    });
 
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.detail || 'IRI computation failed');
+    }
+
+    return await response.json();
+  }
+
+  // Get cached IRI data (INSTANT - preferred method)
+  async getCachedIRI(filename) {
+    const response = await fetch(`${API_BASE_URL}/v1/iri/cached/${filename}`, {
+      headers: this.getAuthHeaders()
+    });
+
+    if (!response.ok) {
+      // If cache not found, fall back to compute
+      if (response.status === 404) {
+        console.log('IRI cache not found, falling back to compute...');
+        return await this.computeIRI(filename);
+      }
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to get cached IRI');
     }
 
     return await response.json();

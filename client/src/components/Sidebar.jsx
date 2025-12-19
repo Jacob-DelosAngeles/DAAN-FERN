@@ -260,7 +260,8 @@ const Sidebar = () => {
           const restoredIriFiles = [];
           for (const file of filesToRestore) {
             try {
-              const computeRes = await fileService.computeIRI(file.filename);
+              // Use cached IRI data for instant load
+              const computeRes = await fileService.getCachedIRI(file.filename);
               if (computeRes.success) {
                 restoredIriFiles.push({
                   id: file.id,
@@ -442,7 +443,8 @@ const Sidebar = () => {
 
       const filename = result.filename;
 
-      const computeRes = await fileService.computeIRI(filename);
+      // Use cached IRI data (already processed during upload)
+      const computeRes = await fileService.getCachedIRI(filename);
       if (computeRes.success) {
         addIriFile({
           id: result.id, // Use real DB ID

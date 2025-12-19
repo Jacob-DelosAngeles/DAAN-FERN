@@ -66,6 +66,45 @@ async def compute_iri(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"IRI computation failed: {str(e)}")
 
+
+@router.get("/cached/{filename}")
+async def get_cached_iri(
+    filename: str,
+    current_user: UserModel = Depends(security.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get pre-processed IRI data from cache (INSTANT - no processing).
+    This is the preferred endpoint for fetching IRI data.
+    Data is cached during upload for fast retrieval.
+    """
+    import json
+    
+    # Find the file record (shared data model - all users can see)
+    upload_record = db.query(UploadModel).filter(
+        UploadModel.file_type == 'csv',
+        (UploadModel.filename == filename) | (UploadModel.original_filename == filename)
+    ).order_by(UploadModel.upload_date.desc()).first()
+    
+    if not upload_record:
+        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+    
+    # Return cached data if available
+    if upload_record.cached_data:
+        try:
+            cached = json.loads(upload_record.cached_data)
+            cached['from_cache'] = True
+            return cached
+        except json.JSONDecodeError:
+            pass  # Fall through to processing
+    
+    # No cache available - return error (upload should have cached it)
+    raise HTTPException(
+        status_code=404, 
+        detail="IRI data not cached. Please re-upload the file."
+    )
+
+
 # NOTE: Legacy GET /compute/{filename} and GET /validate/{filename} endpoints
 # have been removed because they:
 # 1. Did not require authentication

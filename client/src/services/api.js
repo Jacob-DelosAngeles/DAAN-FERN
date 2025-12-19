@@ -101,6 +101,22 @@ export const fileService = {
         }
     },
 
+    // Get cached IRI data (INSTANT - preferred method)
+    getCachedIRI: async (filename) => {
+        try {
+            const response = await api.get(`/iri/cached/${filename}`);
+            return response.data;
+        } catch (error) {
+            // If cache not found (404), fall back to compute
+            if (error.response?.status === 404) {
+                console.log('IRI cache miss, falling back to compute...');
+                return fileService.computeIRI(filename);
+            }
+            console.error('Cached IRI error:', error);
+            return { success: false, message: error.response?.data?.detail || 'Failed to get IRI data' };
+        }
+    },
+
     processPotholes: async (filename) => {
         try {
             const response = await api.get(`/pothole/process/${filename}`);

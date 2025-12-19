@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 import os
 import logging
 import gc  # Garbage collection for memory management
+import json
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +14,7 @@ from models.upload import UploadModel, PotholeImageModel, Upload, UploadCreate
 from models.user import UserModel
 from utils.file_handler import FileHandler
 from services.iri_service import IRIService
+from services.iri_lite import process_iri_chunked  # Lightweight IRI processor
 from core.database import get_db
 from core import security
 from core.config import settings
@@ -214,6 +217,29 @@ async def upload_files(
                 # Track pothole CSV for linking images
                 if type == "pothole":
                     pothole_csv_upload_id = db_upload.id
+                
+                # ============================================
+                # IRI: Process and cache during upload for instant fetches
+                # ============================================
+                if type == "iri":
+                    try:
+                        logger.info(f"Processing IRI data for caching: {file.filename}")
+                        file.file.seek(0)
+                        iri_result = process_iri_chunked(file.file)
+                        
+                        if iri_result['success']:
+                            # Store only the lightweight map data
+                            db_upload.cached_data = json.dumps(iri_result)
+                            db_upload.cache_timestamp = datetime.utcnow()
+                            db.commit()
+                            logger.info(f"Cached {len(iri_result['segments'])} IRI segments for {file.filename}")
+                            message = f"Processed {len(iri_result['segments'])} road segments."
+                        else:
+                            logger.warning(f"IRI processing failed: {iri_result['message']}")
+                            message = f"Uploaded but processing failed: {iri_result['message']}"
+                    except Exception as cache_err:
+                        logger.error(f"IRI caching error: {cache_err}")
+                        message = "Uploaded. Processing will happen on first fetch."
                 
                 results.append(FileUploadResponse(
                     success=True,
