@@ -3,6 +3,7 @@ from typing import List
 from sqlalchemy.orm import Session
 import os
 import logging
+import gc  # Garbage collection for memory management
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +270,9 @@ async def upload_files(
                 rows_processed=0,
                 duration=0.0
             ))
+        finally:
+            # Release memory after each file to prevent exhaustion on large uploads
+            gc.collect()
             
     return results
 

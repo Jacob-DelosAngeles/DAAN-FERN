@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey, Float
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey, Float, Text
 from sqlalchemy.orm import relationship
 from core.database import Base
 from pydantic import BaseModel
@@ -19,6 +19,10 @@ class UploadModel(Base):
     file_size = Column(Integer, nullable=False)  # Size in bytes
     file_hash = Column(String, nullable=True, index=True)  # MD5/SHA256 hash for deduplication
     upload_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Cached processed data (for fast loading)
+    cached_data = Column(Text, nullable=True)  # Cached processed JSON response
+    cache_timestamp = Column(DateTime, nullable=True)  # When cache was created
     
     # Relationships
     user = relationship("UserModel", back_populates="uploads")

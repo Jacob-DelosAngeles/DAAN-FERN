@@ -2,6 +2,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional, Dict, Any
 import os
 import pandas as pd
+import json
+import logging
+from datetime import datetime
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from io import BytesIO
@@ -13,6 +16,7 @@ from core import security
 from core.config import settings
 from utils.file_handler import FileHandler
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 file_handler = FileHandler()
 
@@ -36,6 +40,7 @@ async def process_vehicle_data(
 ):
     """
     Process a vehicle detection CSV file and return map-ready data.
+    Uses caching for fast repeat requests.
     - Admins: Can only process their own files
     - Users: Can process ANY file (shared read-only access)
     """
@@ -58,6 +63,18 @@ async def process_vehicle_data(
 
     if not upload_record:
         raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+
+    # ============================================
+    # CACHE CHECK - Return cached data if available
+    # ============================================
+    if upload_record.cached_data:
+        try:
+            cached_response = json.loads(upload_record.cached_data)
+            logger.info(f"Returning cached vehicle data for {filename}")
+            return cached_response
+        except json.JSONDecodeError:
+            # Invalid cache, proceed to re-process
+            pass
 
     try:
         # 2. Get file content from storage (works for both local and R2)
@@ -101,16 +118,28 @@ async def process_vehicle_data(
                 "type": row['vehicle_type'],
                 "count": 1
             })
-            
-        return {
+        
+        response_data = {
             "success": True,
             "filename": filename,
             "count": len(result_data),
             "data": result_data
         }
 
+        # ============================================
+        # CACHE STORE - Save processed data for future requests
+        # ============================================
+        try:
+            upload_record.cached_data = json.dumps(response_data)
+            upload_record.cache_timestamp = datetime.utcnow()
+            db.commit()
+            logger.info(f"Cached vehicle data for {filename} ({len(result_data)} records)")
+        except Exception as cache_err:
+            logger.warning(f"Failed to cache data: {cache_err}")
+            
+        return response_data
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing CSV: {str(e)}")
-

@@ -219,6 +219,7 @@ const Sidebar = () => {
   } = useAppStore();
 
   const [deleteConfirm, setDeleteConfirm] = useState(null); // ID of file pending deletion confirmation
+  const [isRestoring, setIsRestoring] = useState(true); // Track initial data loading
 
   // Sync Pothole Files to Map Layer
   useEffect(() => {
@@ -353,6 +354,8 @@ const Sidebar = () => {
 
       } catch (err) {
         console.error("Failed to restore session:", err);
+      } finally {
+        setIsRestoring(false);
       }
     };
 
@@ -533,6 +536,15 @@ const Sidebar = () => {
           <div className="h-0.5 w-full bg-blue-500 mb-2 opacity-50"></div>
           <p className="text-xs text-gray-500 italic">Digital Analytics for Asset-based Navigation of Roads</p>
         </div>
+
+        {/* Loading Indicator */}
+        {isRestoring && (
+          <div className="mb-6 bg-blue-100 border border-blue-300 rounded-lg p-4 text-center">
+            <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mb-2"></div>
+            <p className="text-sm font-medium text-blue-800">Loading your data...</p>
+            <p className="text-xs text-blue-600 mt-1">This may take a moment on first load</p>
+          </div>
+        )}
 
         <UploadSection
           title="Vehicle Detection Data"

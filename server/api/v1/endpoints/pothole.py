@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import math
 import logging
+import json
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 from core.config import settings
@@ -29,6 +31,7 @@ async def process_pothole_data(
     """
     Process an uploaded pothole detection CSV file.
     Returns a list of pothole markers with popup HTML.
+    Uses caching for fast repeat requests.
     - Admins: Can only process their own files
     - Users: Can process ANY file (shared read-only access)
     """
@@ -49,12 +52,24 @@ async def process_pothole_data(
             (UploadModel.filename == filename) | (UploadModel.original_filename == filename)
         ).order_by(UploadModel.upload_date.desc()).first()
     
+    if not upload_record:
+        raise HTTPException(status_code=404, detail=f"File record not found for: {filename}")
+    
+    # ============================================
+    # CACHE CHECK - Return cached data if available
+    # ============================================
+    if upload_record.cached_data:
+        try:
+            cached_response = json.loads(upload_record.cached_data)
+            logger.info(f"Returning cached pothole data for {filename}")
+            return cached_response
+        except json.JSONDecodeError:
+            # Invalid cache, proceed to re-process
+            pass
+    
     try:
-        if upload_record:
-             # Use the storage path from the record
-             path_to_read = upload_record.storage_path
-        else:
-             raise HTTPException(status_code=404, detail=f"File record not found for: {filename}")
+        # Use the storage path from the record
+        path_to_read = upload_record.storage_path
 
         # Get content using storage service (works for Local and R2)
         content_bytes = file_handler.storage.get_file_content(path_to_read)
@@ -143,14 +158,31 @@ async def process_pothole_data(
             except Exception as e:
                 logger.debug(f"Error processing pothole row {idx}: {e}")
                 continue
-                
-        return {
+        
+        response_data = {
             "success": True,
             "data": markers_data,
             "count": len(markers_data)
         }
+        
+        # ============================================
+        # CACHE STORE - Save processed data for future requests
+        # ============================================
+        try:
+            upload_record.cached_data = json.dumps(response_data)
+            upload_record.cache_timestamp = datetime.utcnow()
+            db.commit()
+            logger.info(f"Cached pothole data for {filename} ({len(markers_data)} markers)")
+        except Exception as cache_err:
+            logger.warning(f"Failed to cache data: {cache_err}")
+            # Don't fail the request if caching fails
+        
+        return response_data
 
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
