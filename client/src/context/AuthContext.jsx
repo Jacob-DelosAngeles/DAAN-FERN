@@ -1,81 +1,102 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { authService } from '../services/api';
-import { jwtDecode } from 'jwt-decode';
+import { useUser, useAuth as useClerkAuth, useClerk } from '@clerk/clerk-react';
+import { fileService, setTokenGetter } from '../services/api';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const { isLoaded, isSignedIn, user: clerkUser } = useUser();
+    const { getToken } = useClerkAuth();
+    const { signOut } = useClerk();
 
+    const [role, setRole] = useState('user');
+    const [synced, setSynced] = useState(false);
+    const [syncError, setSyncError] = useState(null);
+
+    // Register getToken function with API service for fresh tokens on each request
     useEffect(() => {
-        const token = authService.getCurrentUser();
-        if (token) {
-            try {
-                const decoded = jwtDecode(token);
-                // Check if token is expired
-                if (decoded.exp * 1000 < Date.now()) {
-                    authService.logout();
-                    setUser(null);
-                } else {
-                    // Decode role from token
-                    const role = decoded.role || 'user';
-                    setUser({ 
-                        email: decoded.sub, 
-                        role: role,
-                        // Helper properties for easy access
-                        is_superuser: role === 'superuser',
-                        is_admin: role === 'superuser' || role === 'admin'
-                    });
+        if (isLoaded && isSignedIn && getToken) {
+            setTokenGetter(getToken);
+        } else {
+            setTokenGetter(null);
+        }
+    }, [isLoaded, isSignedIn, getToken]);
+
+    // Sync user with backend when signed in
+    useEffect(() => {
+        async function syncUserWithBackend() {
+            if (isSignedIn && clerkUser && !synced) {
+                try {
+                    // Get Clerk JWT token
+                    const token = await getToken();
+
+                    // Sync with backend to get/create user and get role
+                    const response = await fileService.syncUser(token);
+
+
+
+                    if (response && response.role) {
+
+                        setRole(response.role);
+                    }
+                    setSynced(true);
+                    setSyncError(null);
+                } catch (error) {
+                    console.error('User sync failed:', error);
+                    setSyncError(error.message);
+                    // Default to 'user' role if sync fails
+                    setRole('user');
+                    setSynced(true);
                 }
-            } catch (error) {
-                authService.logout();
-                setUser(null);
             }
         }
-        setLoading(false);
-    }, []);
 
-    const login = async (email, password) => {
-        try {
-            const response = await authService.login(email, password);
-            // Decode the new token to get role
-            const decoded = jwtDecode(response.access_token);
-            const role = decoded.role || 'user';
-            setUser({ 
-                email, 
-                role: role,
-                is_superuser: role === 'superuser',
-                is_admin: role === 'superuser' || role === 'admin'
-            });
-            return true;
-        } catch (error) {
-            console.error("Login failed", error);
-            throw error;
+        if (isLoaded && isSignedIn) {
+            syncUserWithBackend();
         }
-    };
+    }, [isLoaded, isSignedIn, clerkUser, synced, getToken]);
 
-    const register = async (email, password, fullName) => {
-        try {
-            await authService.register(email, password, fullName);
-            return true;
-        } catch (error) {
-            console.error("Registration failed", error);
-            throw error;
+    // Reset sync state when user signs out
+    useEffect(() => {
+        if (isLoaded && !isSignedIn) {
+            setSynced(false);
+            setRole('user');
         }
+    }, [isLoaded, isSignedIn]);
+
+    const logout = async () => {
+        await signOut();
+        setSynced(false);
+        setRole('user');
     };
 
-    const logout = () => {
-        authService.logout();
-        setUser(null);
-    };
+    // Create user object compatible with existing components
+    const user = isSignedIn && clerkUser ? {
+        email: clerkUser.primaryEmailAddress?.emailAddress,
+        name: clerkUser.fullName || clerkUser.firstName,
+        clerkId: clerkUser.id,
+        role: role,
+        is_superuser: role === 'superuser',
+        is_admin: role === 'superuser' || role === 'admin'
+    } : null;
+
+    const loading = !isLoaded || (isSignedIn && !synced);
 
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+        <AuthContext.Provider value={{
+            user,
+            logout,
+            loading,
+            isAuthenticated: isSignedIn,
+            role,
+            isSuperuser: role === 'superuser',
+            isAdmin: role === 'superuser' || role === 'admin',
+            getToken,
+            syncError
+        }}>
             {children}
         </AuthContext.Provider>
     );
 };
 
 export const useAuth = () => useContext(AuthContext);
-

@@ -13,8 +13,9 @@ class UserModel(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
-    full_name = Column(String, index=True)
-    hashed_password = Column(String)
+    clerk_id = Column(String, unique=True, index=True, nullable=True)  # Clerk user ID
+    full_name = Column(String, index=True, nullable=True)
+    hashed_password = Column(String, nullable=True)  # Nullable for Clerk-only users
     is_active = Column(Boolean, default=True)
     # Role field: "superuser" (owner), "admin" (can upload), "user" (read-only)
     role = Column(String, default="user")

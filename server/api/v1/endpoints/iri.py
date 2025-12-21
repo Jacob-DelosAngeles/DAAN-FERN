@@ -8,7 +8,8 @@ from models.upload import UploadModel
 from models.user import UserModel
 from services.iri_service import IRIService
 from core.database import get_db
-from core import security
+from core.clerk_auth import get_current_user  # Clerk auth
+from core import security  # Keep for backwards compatibility
 from core.config import settings 
 from sqlalchemy.orm import Session
 from fastapi import Depends
@@ -24,7 +25,7 @@ file_handler = FileHandler()
 async def compute_iri(
     filename: str,
     request: IRIComputationRequest = IRIComputationRequest(),
-    current_user: UserModel = Depends(security.get_current_user),
+    current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -70,7 +71,7 @@ async def compute_iri(
 @router.get("/cached/{filename}")
 async def get_cached_iri(
     filename: str,
-    current_user: UserModel = Depends(security.get_current_user),
+    current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """

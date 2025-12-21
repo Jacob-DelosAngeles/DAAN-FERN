@@ -12,7 +12,8 @@ from io import BytesIO
 from models.upload import UploadModel
 from models.user import UserModel
 from core.database import get_db
-from core import security
+from core.clerk_auth import get_current_user  # Clerk auth
+from core import security  # Keep for backwards compatibility
 from core.config import settings
 from utils.file_handler import FileHandler
 
@@ -35,7 +36,7 @@ class VehicleProcessResponse(BaseModel):
 @router.get("/process/{filename}", response_model=VehicleProcessResponse)
 async def process_vehicle_data(
     filename: str,
-    current_user: UserModel = Depends(security.get_current_user),
+    current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """

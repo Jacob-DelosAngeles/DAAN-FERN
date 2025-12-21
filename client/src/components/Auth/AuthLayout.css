@@ -1,0 +1,211 @@
+/* Auth Layout - Project DAAN Express */
+.auth-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #111827;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* ========================================
+   LEFT PANEL - BRANDING & VISUALIZATION
+   ======================================== */
+.auth-visual-panel {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: none;
+  background: #000;
+}
+
+@media (min-width: 1024px) {
+  .auth-visual-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Background Image Layer */
+.auth-bg-image {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  z-index: 1;
+}
+
+/* Dark Overlay for Readability */
+.auth-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom,
+      rgba(15, 23, 42, 0.8) 0%,
+      rgba(15, 23, 42, 0.6) 50%,
+      rgba(15, 23, 42, 0.9) 100%);
+  z-index: 2;
+}
+
+/* Road/Traffic Animation Overlay */
+.road-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  transform: perspective(1000px) rotateX(20deg) scale(1.2);
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.vehicle-overlay {
+  position: absolute;
+  height: 2px;
+  width: 100px;
+  background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.8), #fff);
+  box-shadow: 0 0 10px rgba(96, 165, 250, 0.5);
+  border-radius: 4px;
+  left: -150px;
+}
+
+.vehicle-overlay.truck {
+  width: 150px;
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.8), #fff);
+}
+
+.vehicle-overlay.lane-0 {
+  top: 65%;
+  animation: drive-infinite 5s linear infinite;
+}
+
+.vehicle-overlay.lane-1 {
+  top: 68%;
+  animation: drive-infinite 7s linear infinite;
+}
+
+.vehicle-overlay.lane-2 {
+  top: 72%;
+  animation: drive-infinite 4s linear infinite;
+}
+
+@keyframes drive-infinite {
+  from {
+    transform: translateX(0);
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  to {
+    transform: translateX(120vw);
+    opacity: 0;
+  }
+}
+
+/* Branding Content */
+.branding-content {
+  position: relative;
+  z-index: 10;
+  color: white;
+  text-align: center;
+  padding: 2rem;
+  max-width: 500px;
+}
+
+.logo-container {
+  margin-bottom: 2rem;
+  display: flex;
+  justify-content: center;
+}
+
+.daan-logo {
+  width: 150px;
+  height: auto;
+  filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.3));
+  animation: float-logo 4s ease-in-out infinite;
+}
+
+@keyframes float-logo {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.brand-title {
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1.1;
+  margin-bottom: 1rem;
+  letter-spacing: -0.02em;
+}
+
+.text-blue-500 {
+  color: #3b82f6;
+  text-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+}
+
+.brand-subtitle {
+  font-size: 1.125rem;
+  color: #94a3b8;
+  margin-bottom: 3rem;
+  font-weight: 300;
+}
+
+.feature-grid {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.feature-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(4px);
+  transition: all 0.3s ease;
+  width: 100px;
+}
+
+.feature-item:hover {
+  background: rgba(30, 41, 59, 0.6);
+  transform: translateY(-5px);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.feature-icon {
+  font-size: 1.5rem;
+}
+
+.feature-text {
+  font-size: 0.75rem;
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+/* ========================================
+   RIGHT PANEL - CLERK FORM
+   Using Clerk's default styling, just centering
+   ======================================== */
+.auth-form-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: #111827;
+}

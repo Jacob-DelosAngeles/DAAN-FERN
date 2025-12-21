@@ -40,7 +40,7 @@ app = FastAPI(
 # Example: CORS_ORIGINS=https://your-app.vercel.app,http://localhost:5173
 cors_origins_str = os.getenv(
     "CORS_ORIGINS", 
-    "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
+    "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:5174"
 )
 origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
 

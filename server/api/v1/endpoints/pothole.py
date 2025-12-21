@@ -15,7 +15,8 @@ from utils.file_handler import FileHandler
 from models.upload import UploadModel
 from models.user import UserModel
 from core.database import get_db
-from core import security
+from core.clerk_auth import get_current_user  # Clerk auth
+from core import security  # Keep for backwards compatibility
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 
@@ -25,7 +26,7 @@ file_handler = FileHandler()
 @router.get("/process/{filename}", response_model=Dict[str, Any])
 async def process_pothole_data(
     filename: str,
-    current_user: UserModel = Depends(security.get_current_user),
+    current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """

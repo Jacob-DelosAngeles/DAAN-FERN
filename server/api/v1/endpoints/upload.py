@@ -16,7 +16,8 @@ from utils.file_handler import FileHandler
 from services.iri_service import IRIService
 from services.iri_lite import process_iri_chunked  # Lightweight IRI processor
 from core.database import get_db
-from core import security
+from core.clerk_auth import get_current_user  # Clerk auth
+from core import security  # Keep for backwards compatibility
 from core.config import settings
 import hashlib
 import pandas as pd
@@ -40,7 +41,7 @@ ALLOWED_EXTENSIONS = {
 async def upload_files(
     files: List[UploadFile] = File(...), 
     type: str = "iri",
-    current_user: UserModel = Depends(security.get_current_user),
+    current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -304,7 +305,7 @@ async def upload_files(
 
 @router.get("/files")
 async def list_uploaded_files(
-    current_user: UserModel = Depends(security.get_current_user),
+    current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -325,7 +326,7 @@ async def list_uploaded_files(
 @router.get("/files/{category}")
 async def list_files_by_category(
     category: str,
-    current_user: UserModel = Depends(security.get_current_user),
+    current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -349,7 +350,7 @@ async def list_files_by_category(
 @router.delete("/{upload_id}")
 async def delete_upload(
     upload_id: int,
-    current_user: UserModel = Depends(security.get_current_user),
+    current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """

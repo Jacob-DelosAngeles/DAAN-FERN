@@ -9,10 +9,41 @@ const api = axios.create({
     },
 });
 
-// Add a request interceptor to add the auth token to headers
+// Store for the getToken function (not the token itself - tokens expire!)
+let getTokenFunction = null;
+
+// Function to set the getToken function from Clerk
+export const setTokenGetter = (getTokenFn) => {
+    getTokenFunction = getTokenFn;
+};
+
+// Legacy: set static token (for backwards compatibility)
+export const setAuthToken = (token) => {
+    // Store as backup in localStorage
+    if (token) {
+        localStorage.setItem('clerk_token_backup', token);
+    }
+};
+
+// Add a request interceptor to add fresh auth token to headers
 api.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('token');
+    async (config) => {
+        let token = null;
+
+        // Get fresh token from Clerk if available
+        if (getTokenFunction) {
+            try {
+                token = await getTokenFunction();
+            } catch (e) {
+                console.warn('Failed to get fresh Clerk token:', e);
+            }
+        }
+
+        // Fall back to localStorage for backwards compatibility
+        if (!token) {
+            token = localStorage.getItem('token') || localStorage.getItem('clerk_token_backup');
+        }
+
         if (token) {
             config.headers['Authorization'] = `Bearer ${token}`;
         }
@@ -23,6 +54,7 @@ api.interceptors.request.use(
     }
 );
 
+// Legacy auth service (kept for backwards compatibility during migration)
 export const authService = {
     login: async (username, password) => {
         const formData = new FormData();
@@ -48,6 +80,7 @@ export const authService = {
     },
     logout: () => {
         localStorage.removeItem('token');
+        currentAuthToken = null;
     },
     getCurrentUser: () => {
         return localStorage.getItem('token');
@@ -63,6 +96,21 @@ export const authService = {
 };
 
 export const fileService = {
+    // Sync user with backend (called after Clerk login)
+    syncUser: async (clerkToken) => {
+        try {
+            const response = await api.post('/auth/sync', {}, {
+                headers: {
+                    'Authorization': `Bearer ${clerkToken}`
+                }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('User sync error:', error);
+            throw error;
+        }
+    },
+
     uploadFile: async (file, type = 'iri') => {
         const formData = new FormData();
 

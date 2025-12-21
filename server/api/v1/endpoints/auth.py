@@ -10,11 +10,41 @@ import logging
 from core import security
 from core.config import settings
 from core.database import get_db
+from core.clerk_auth import get_current_user as get_clerk_user  # Clerk auth
 from models.user import Token, User, UserCreate, UserModel, VALID_ROLES
 from jose import jwt, JWTError
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+# ============================================
+# CLERK AUTHENTICATION ENDPOINTS
+# ============================================
+
+@router.post("/sync")
+def sync_clerk_user(
+    current_user: UserModel = Depends(get_clerk_user),
+) -> Any:
+    """
+    Sync user from Clerk.
+    Called by frontend after Clerk login to get/create local user record.
+    Returns user info including role.
+    """
+    logger.info(f"User synced from Clerk: {current_user.email} (role: {current_user.role})")
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "role": current_user.role,
+        "is_active": current_user.is_active,
+        "full_name": current_user.full_name,
+    }
+
+
+# ============================================
+# LEGACY AUTHENTICATION ENDPOINTS (deprecated)
+# Kept for backwards compatibility during migration
+# ============================================
 
 
 def db_query_with_retry(db: Session, query_func, max_retries: int = 3):
@@ -131,7 +161,7 @@ def register_user(
 def read_users(
     skip: int = 0, 
     limit: int = 100, 
-    current_user: UserModel = Depends(security.get_current_user),
+    current_user: UserModel = Depends(get_clerk_user),
     db: Session = Depends(get_db)
 ) -> Any:
     """
@@ -149,7 +179,7 @@ def read_users(
 def update_user_role(
     user_id: int,
     role: str,
-    current_user: UserModel = Depends(security.get_current_user),
+    current_user: UserModel = Depends(get_clerk_user),
     db: Session = Depends(get_db)
 ) -> Any:
     """
