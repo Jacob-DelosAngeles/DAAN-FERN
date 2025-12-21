@@ -34,7 +34,7 @@ class UserModel(Base):
 
 # Pydantic Schemas
 class UserBase(BaseModel):
-    email: EmailStr
+    email: str  # Changed from EmailStr to support Clerk synthetic emails
     full_name: Optional[str] = None
     is_active: bool = True
     role: str = "user"
