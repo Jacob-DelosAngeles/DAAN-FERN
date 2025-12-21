@@ -12,26 +12,27 @@ connect_args = {}
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 else:
-    # PostgreSQL connection options for cross-region latency
+    # PostgreSQL connection options - aggressive settings for Supabase cold starts
     connect_args = {
-        "connect_timeout": 10,           # Connection timeout in seconds
+        "connect_timeout": 30,           # Connection timeout - allow 30s for cold start
         "keepalives": 1,                 # Enable TCP keepalives
-        "keepalives_idle": 30,           # Seconds before sending keepalive
-        "keepalives_interval": 10,       # Interval between keepalives
-        "keepalives_count": 5,           # Number of keepalives before giving up
+        "keepalives_idle": 10,           # Seconds before sending keepalive (reduced)
+        "keepalives_interval": 5,        # Interval between keepalives (reduced)
+        "keepalives_count": 10,          # Number of keepalives before giving up
+        "options": "-c statement_timeout=60000"  # 60s statement timeout
     }
 
 # Configure engine with optimized pool settings for Supabase
-# Optimized for cross-region connections (Render US <-> Supabase Singapore)
+# Optimized for cross-region connections with cold-start handling
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, 
     connect_args=connect_args,
     poolclass=QueuePool,
     pool_pre_ping=True,           # Check if connection is alive before use
-    pool_recycle=180,             # Recycle connections every 3 minutes
-    pool_size=3,                  # Smaller pool size for free tier
-    max_overflow=5,               # Allow extra connections during high load
-    pool_timeout=30,              # Wait up to 30s for a connection from pool
+    pool_recycle=60,              # Recycle connections every 1 minute (more aggressive)
+    pool_size=2,                  # Smaller pool for faster pre-ping
+    max_overflow=3,               # Limited overflow
+    pool_timeout=60,              # Wait up to 60s for a connection from pool
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

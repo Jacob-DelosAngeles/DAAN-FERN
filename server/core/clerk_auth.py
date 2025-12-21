@@ -168,10 +168,10 @@ def get_current_user_sync(
     if not clerk_id:
         raise HTTPException(status_code=401, detail="Invalid token: missing user ID")
     
-    # Retry logic for database operations
+    # Retry logic for database operations - with longer delays for cold starts
     import time
     max_retries = 3
-    retry_delay = 1  # seconds
+    retry_delay = 5  # Start with 5 seconds (increased for cold starts)
     last_error = None
     
     for attempt in range(max_retries):
