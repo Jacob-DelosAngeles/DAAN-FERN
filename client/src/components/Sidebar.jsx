@@ -487,38 +487,66 @@ const Sidebar = () => {
   };
 
 
-  // Updated to handle array of files
+  // Updated to handle array of files with CHUNKED UPLOAD
   const handlePotholeUpload = async (files) => {
     // files is now an array: [csv, ...images]
-    const uploadRes = await fileService.uploadFile(files, 'pothole');
+    const csvFile = files.find(f => f.name.toLowerCase().endsWith('.csv'));
+    const imageFiles = files.filter(f => !f.name.toLowerCase().endsWith('.csv'));
 
-    if (uploadRes.success) {
-      // Get the CSV result
-      const results = uploadRes.data || (Array.isArray(uploadRes) ? uploadRes : [uploadRes]);
-      const csvResult = results.find(r => r.filename.toLowerCase().endsWith('.csv') && r.success);
+    if (!csvFile) {
+      throw new Error("No CSV file found in upload");
+    }
 
-      if (csvResult) {
-        const processRes = await fileService.processPotholes(csvResult.filename);
-        if (processRes.success) {
-          addPotholeFile({
-            id: csvResult.id || Date.now(),
-            filename: csvResult.original_filename || csvResult.filename,
-            data: processRes.data,
-            visible: true
-          });
-        } else {
-          throw new Error(processRes.message);
-        }
-      } else {
-        // Try to find specific failure message
-        const failedCsv = results.find(r => r.filename.toLowerCase().endsWith('.csv'));
-        if (failedCsv) {
-          throw new Error(failedCsv.message || "CSV upload failed");
-        }
-        throw new Error("CSV upload failed or not found in response");
+    const BATCH_SIZE = 30; // Upload 30 images at a time to prevent timeout
+
+    // Step 1: Upload CSV first 
+    console.log('Uploading CSV first...');
+    const csvUploadRes = await fileService.uploadFile([csvFile], 'pothole');
+
+    if (!csvUploadRes.success) {
+      throw new Error(csvUploadRes.message || "CSV upload failed");
+    }
+
+    const csvResults = csvUploadRes.data || (Array.isArray(csvUploadRes) ? csvUploadRes : [csvUploadRes]);
+    const csvResult = csvResults.find(r => r.filename?.toLowerCase().endsWith('.csv') && r.success);
+
+    if (!csvResult) {
+      throw new Error("CSV upload failed or not found in response");
+    }
+
+    // Step 2: Upload images in batches
+    if (imageFiles.length > 0) {
+      const batches = [];
+      for (let i = 0; i < imageFiles.length; i += BATCH_SIZE) {
+        batches.push(imageFiles.slice(i, i + BATCH_SIZE));
       }
+
+      console.log(`Uploading ${imageFiles.length} images in ${batches.length} batches...`);
+
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        console.log(`Uploading batch ${i + 1} of ${batches.length} (${batch.length} images)...`);
+
+        try {
+          await fileService.uploadFile(batch, 'pothole');
+        } catch (batchErr) {
+          console.warn(`Batch ${i + 1} failed:`, batchErr);
+          // Continue with next batch instead of failing entirely
+        }
+      }
+    }
+
+    // Step 3: Process the CSV to get pothole data
+    const processRes = await fileService.processPotholes(csvResult.filename);
+    if (processRes.success) {
+      addPotholeFile({
+        id: csvResult.id || Date.now(),
+        filename: csvResult.original_filename || csvResult.filename,
+        data: processRes.data,
+        visible: true
+      });
     } else {
-      throw new Error(uploadRes.message);
+      throw new Error(processRes.message);
     }
   };
 
