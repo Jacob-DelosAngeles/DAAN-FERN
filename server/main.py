@@ -66,8 +66,9 @@ app.include_router(pavement.router, prefix=f"{settings.API_V1_STR}/pavement", ta
 async def root():
     return {"message": "Project DAAN Express API is running!"}
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
+    """Health check endpoint - supports both GET and HEAD for monitoring services."""
     return {"status": "healthy", "service": "Project DAAN Express API"}
 
 if __name__ == "__main__":
