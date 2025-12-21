@@ -144,6 +144,7 @@ def get_current_user_sync(
     """
     Synchronous version - Get current user from Clerk token.
     Creates user if not exists, returns existing user if found.
+    Includes retry logic for database connection failures.
     """
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header required")
@@ -167,50 +168,72 @@ def get_current_user_sync(
     if not clerk_id:
         raise HTTPException(status_code=401, detail="Invalid token: missing user ID")
     
-    try:
-        # Find user by clerk_id first
-        user = db.query(UserModel).filter(UserModel.clerk_id == clerk_id).first()
-        
-        if user:
-            return user
-        
-        # If not found by clerk_id, try to find by email (migration case)
-        if email:
-            user = db.query(UserModel).filter(UserModel.email == email).first()
-            if user:
-                # Link existing user to Clerk
-                user.clerk_id = clerk_id
-                db.commit()
-                logger.info(f"Linked existing user {email} to Clerk ID {clerk_id}")
-                return user
-        
-        # Create new user
-        if not email:
-            # Fetch real email from Clerk Backend API
-            email = fetch_clerk_user_email(clerk_id)
+    # Retry logic for database operations
+    import time
+    max_retries = 3
+    retry_delay = 1  # seconds
+    last_error = None
+    
+    for attempt in range(max_retries):
+        try:
+            # Find user by clerk_id first
+            user = db.query(UserModel).filter(UserModel.clerk_id == clerk_id).first()
             
-        if not email:
-            # Last resort fallback (should rarely happen)
-            logger.warning(f"Could not fetch email for Clerk user {clerk_id}, using synthetic email")
-            email = f"user_{clerk_id}@clerk.local"
-        
-        user = UserModel(
-            email=email,
-            clerk_id=clerk_id,
-            role="user",  # New users start as regular users
-            is_active=True,
-            hashed_password=None,  # No password needed for Clerk users
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        
-        logger.info(f"Created new user from Clerk: {email} (Clerk ID: {clerk_id})")
-        return user
-        
-    except (OperationalError, InterfaceError) as e:
-        logger.error(f"Database error during user lookup: {e}")
-        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
+            if user:
+                return user
+            
+            # If not found by clerk_id, try to find by email (migration case)
+            if email:
+                user = db.query(UserModel).filter(UserModel.email == email).first()
+                if user:
+                    # Link existing user to Clerk
+                    user.clerk_id = clerk_id
+                    db.commit()
+                    logger.info(f"Linked existing user {email} to Clerk ID {clerk_id}")
+                    return user
+            
+            # Create new user
+            if not email:
+                # Fetch real email from Clerk Backend API
+                email = fetch_clerk_user_email(clerk_id)
+                
+            if not email:
+                # Last resort fallback (should rarely happen)
+                logger.warning(f"Could not fetch email for Clerk user {clerk_id}, using synthetic email")
+                email = f"user_{clerk_id}@clerk.local"
+            
+            user = UserModel(
+                email=email,
+                clerk_id=clerk_id,
+                role="user",  # New users start as regular users
+                is_active=True,
+                hashed_password=None,  # No password needed for Clerk users
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            
+            logger.info(f"Created new user from Clerk: {email} (Clerk ID: {clerk_id})")
+            return user
+            
+        except (OperationalError, InterfaceError) as e:
+            last_error = e
+            logger.warning(f"Database connection error (attempt {attempt + 1}/{max_retries}): {e}")
+            
+            if attempt < max_retries - 1:
+                # Rollback any pending transaction
+                try:
+                    db.rollback()
+                except:
+                    pass
+                    
+                time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+            else:
+                logger.error(f"Database error after {max_retries} retries: {e}")
+                raise HTTPException(status_code=503, detail="Database temporarily unavailable. Please try again.")
+    
+    # Should never reach here, but just in case
+    raise HTTPException(status_code=503, detail="Database temporarily unavailable")
 
 
 # Alias for dependency injection
