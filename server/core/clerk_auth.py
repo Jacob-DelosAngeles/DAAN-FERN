@@ -23,6 +23,50 @@ CLERK_JWKS_CACHE = None
 CLERK_JWKS_CACHE_TIME = None
 
 
+def fetch_clerk_user_email(clerk_user_id: str) -> Optional[str]:
+    """
+    Fetch user's primary email from Clerk Backend API.
+    Uses synchronous httpx since we're in a sync context.
+    """
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(
+                f"https://api.clerk.com/v1/users/{clerk_user_id}",
+                headers={
+                    "Authorization": f"Bearer {settings.CLERK_SECRET_KEY}",
+                    "Content-Type": "application/json"
+                }
+            )
+            
+            if response.status_code == 200:
+                user_data = response.json()
+                
+                # Get primary email from email_addresses array
+                email_addresses = user_data.get("email_addresses", [])
+                primary_email_id = user_data.get("primary_email_address_id")
+                
+                # Find primary email
+                for email_obj in email_addresses:
+                    if email_obj.get("id") == primary_email_id:
+                        email = email_obj.get("email_address")
+                        logger.info(f"Fetched email from Clerk API: {email}")
+                        return email
+                
+                # Fallback: return first email if no primary
+                if email_addresses:
+                    email = email_addresses[0].get("email_address")
+                    logger.info(f"Fetched first email from Clerk API: {email}")
+                    return email
+                    
+            else:
+                logger.warning(f"Clerk API returned {response.status_code}: {response.text}")
+                
+    except Exception as e:
+        logger.error(f"Failed to fetch email from Clerk API: {e}")
+    
+    return None
+
+
 async def get_clerk_jwks():
     """Fetch Clerk's JWKS for token verification (with caching)."""
     global CLERK_JWKS_CACHE, CLERK_JWKS_CACHE_TIME
@@ -142,7 +186,12 @@ def get_current_user_sync(
         
         # Create new user
         if not email:
-            # Try to extract email from token metadata
+            # Fetch real email from Clerk Backend API
+            email = fetch_clerk_user_email(clerk_id)
+            
+        if not email:
+            # Last resort fallback (should rarely happen)
+            logger.warning(f"Could not fetch email for Clerk user {clerk_id}, using synthetic email")
             email = f"user_{clerk_id}@clerk.local"
         
         user = UserModel(
