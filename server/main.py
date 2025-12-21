@@ -64,8 +64,25 @@ async def root():
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
-    """Health check endpoint - supports both GET and HEAD for monitoring services."""
-    return {"status": "healthy", "service": "Project DAAN Express API"}
+    """Health check endpoint - also pings database to keep connection warm."""
+    from core.database import SessionLocal
+    from sqlalchemy import text
+    
+    db_status = "unknown"
+    try:
+        # Quick ping to keep database connection warm
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)[:50]}"
+    
+    return {
+        "status": "healthy", 
+        "service": "Project DAAN Express API",
+        "database": db_status
+    }
 
 @app.on_event("startup")
 async def startup_event():
