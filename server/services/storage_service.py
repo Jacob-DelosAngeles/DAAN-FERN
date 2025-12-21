@@ -134,22 +134,60 @@ class R2StorageService(StorageService):
             region_name='auto'  # Cloudflare R2 requires a region, often 'auto' works or 'us-east-1'
         )
         self.bucket_name = settings.R2_BUCKET_NAME
+    
+    def _generate_unique_filename(self, original_filename: str, prefix: str) -> str:
+        """
+        Generate a unique filename based on original, adding _1, _2, etc if duplicates exist.
+        """
+        from pathlib import Path as PurePath
+        
+        # Clean the filename
+        base_name = PurePath(original_filename).stem
+        extension = PurePath(original_filename).suffix.lower()
+        
+        # Sanitize filename (remove problematic characters)
+        import re
+        base_name = re.sub(r'[^\w\-.]', '_', base_name)
+        
+        # Check if this exact key exists
+        target_key = f"{prefix}/{base_name}{extension}"
+        
+        try:
+            # Check if object exists
+            self.s3_client.head_object(Bucket=self.bucket_name, Key=target_key)
+            # If we get here, it exists - need to find unique suffix
+            
+            suffix = 1
+            while suffix < 1000:  # Safety limit
+                target_key = f"{prefix}/{base_name}_{suffix}{extension}"
+                try:
+                    self.s3_client.head_object(Bucket=self.bucket_name, Key=target_key)
+                    suffix += 1
+                except:
+                    # This one doesn't exist, use it
+                    return f"{base_name}_{suffix}{extension}"
+            
+            # Fallback to UUID if too many duplicates
+            return f"{base_name}_{uuid.uuid4().hex[:8]}{extension}"
+            
+        except:
+            # Object doesn't exist, use original name
+            return f"{base_name}{extension}"
         
     async def save_file(self, file: UploadFile, user_id: int, category: str, directory: str = "") -> str:
         try:
-            # Generate unique filename
-            file_extension = Path(file.filename).suffix if file.filename else ""
-            unique_filename = f"{uuid.uuid4()}{file_extension}"
-            
-            # Construct object key with user_id/category structure
-            object_key = f"{user_id}/{category}"
+            # Construct prefix for file path
+            prefix = f"{user_id}/{category}"
             if directory:
-                object_key += f"/{directory}"
-            object_key += f"/{unique_filename}"
+                prefix += f"/{directory}"
+            
+            # Generate unique filename based on original (with _1, _2 for duplicates)
+            unique_filename = self._generate_unique_filename(file.filename or "unnamed", prefix)
+            
+            # Construct full object key
+            object_key = f"{prefix}/{unique_filename}"
             
             # Upload file
-            # Use put_object which is simpler and avoids threading issues with SpooledTemporaryFile
-            # that upload_fileobj might introduce (which can cause "I/O operation on closed file")
             file.file.seek(0)
             self.s3_client.put_object(
                 Bucket=self.bucket_name,
@@ -160,6 +198,7 @@ class R2StorageService(StorageService):
             # Reset file pointer
             await file.seek(0)
             
+            logger.info(f"R2: Saved '{file.filename}' as '{object_key}'")
             return object_key
             
         except Exception as e:

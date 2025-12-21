@@ -99,24 +99,66 @@ const UploadPanel = () => {
     setError(null);
     setUploadProgress(0);
 
+    const BATCH_SIZE = 30; // Upload 30 images at a time to prevent timeout
+    const totalFiles = potholeImages.length + 1; // +1 for CSV
+    let uploadedCount = 0;
+
     try {
-      // Combine CSV and images into a single array
-      // IMPORTANT: CSV must be first so backend processes it first and captures ID for linking images
-      const allFiles = [potholeCsv, ...potholeImages];
+      // Step 1: Upload CSV first (must be processed first to get upload ID for linking)
+      setUploadStatus(prev => ({ ...prev, [potholeCsv.name]: 'uploading' }));
 
-      // Send single request
-      setUploadStatus(prev => ({ ...prev, 'batch': 'uploading' }));
-      const response = await apiService.uploadFile(allFiles, 'pothole');
+      const csvResponse = await apiService.uploadFile([potholeCsv], 'pothole');
 
-      // Update progress (simulated as we don't have real progress from fetch yet)
-      setUploadProgress(100);
+      setUploadStatus(prev => ({ ...prev, [potholeCsv.name]: 'success' }));
+      uploadedCount++;
+      setUploadProgress((uploadedCount / totalFiles) * 100);
 
-      setUploadStatus(prev => ({
-        ...prev,
-        'batch': 'success',
-        [potholeCsv.name]: 'success',
-        ...Object.fromEntries(potholeImages.map(img => [img.name, 'success']))
-      }));
+      // Step 2: Upload images in batches
+      const batches = [];
+      for (let i = 0; i < potholeImages.length; i += BATCH_SIZE) {
+        batches.push(potholeImages.slice(i, i + BATCH_SIZE));
+      }
+
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex];
+
+        // Mark batch as uploading
+        batch.forEach(img => {
+          setUploadStatus(prev => ({ ...prev, [img.name]: 'uploading' }));
+        });
+
+        try {
+          // Upload this batch
+          setUploadStatus(prev => ({
+            ...prev,
+            '_batch_status': `Uploading batch ${batchIndex + 1} of ${batches.length}...`
+          }));
+
+          await apiService.uploadFile(batch, 'pothole');
+
+          // Mark batch as success
+          batch.forEach(img => {
+            setUploadStatus(prev => ({ ...prev, [img.name]: 'success' }));
+          });
+
+          uploadedCount += batch.length;
+          setUploadProgress((uploadedCount / totalFiles) * 100);
+
+        } catch (batchErr) {
+          // Mark this batch as error but continue with next batch
+          batch.forEach(img => {
+            setUploadStatus(prev => ({ ...prev, [img.name]: 'error' }));
+          });
+          console.error(`Batch ${batchIndex + 1} failed:`, batchErr);
+          // Continue to next batch instead of failing entirely
+        }
+      }
+
+      // Clear batch status
+      setUploadStatus(prev => {
+        const { _batch_status, ...rest } = prev;
+        return rest;
+      });
 
       // Clear selections
       setPotholeCsv(null);
@@ -126,11 +168,10 @@ const UploadPanel = () => {
 
     } catch (err) {
       setError(err.message);
-      setUploadStatus(prev => ({ ...prev, 'batch': 'error' }));
+      setUploadStatus(prev => ({ ...prev, 'upload': 'error' }));
       console.error('Pothole upload failed:', err);
     } finally {
       setIsUploading(false);
-      setUploadProgress(0);
     }
   }, [potholeCsv, potholeImages]);
 
@@ -305,7 +346,7 @@ const UploadPanel = () => {
           {isUploading && (
             <div className="mt-3">
               <div className="flex justify-between text-xs text-gray-600 mb-1">
-                <span>Uploading...</span>
+                <span>{uploadStatus._batch_status || 'Uploading...'}</span>
                 <span>{uploadProgress.toFixed(0)}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
