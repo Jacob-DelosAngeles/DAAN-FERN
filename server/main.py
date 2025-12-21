@@ -25,10 +25,6 @@ from core.config import settings
 from core.database import engine
 from models import user, upload as upload_models
 
-# Create database tables
-user.Base.metadata.create_all(bind=engine)
-upload_models.Base.metadata.create_all(bind=engine)
-
 # Create FastAPI app
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -70,6 +66,26 @@ async def root():
 async def health_check():
     """Health check endpoint - supports both GET and HEAD for monitoring services."""
     return {"status": "healthy", "service": "Project DAAN Express API"}
+
+@app.on_event("startup")
+async def startup_event():
+    """Create database tables on startup (with retry for cold starts)."""
+    import time
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            user.Base.metadata.create_all(bind=engine)
+            upload_models.Base.metadata.create_all(bind=engine)
+            logger.info("Database tables created/verified successfully")
+            return
+        except Exception as e:
+            logger.warning(f"Database init attempt {attempt + 1}/{max_retries} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(5 * (attempt + 1))
+            else:
+                logger.error("Could not initialize database tables - will retry on first request")
+                # Don't crash - let the app start anyway
 
 if __name__ == "__main__":
     uvicorn.run(
