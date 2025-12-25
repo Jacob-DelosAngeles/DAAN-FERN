@@ -23,13 +23,13 @@ const Navbar = () => {
             </svg>
           )}
         </button>
-        
+
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-lg">🛣️</span>
           </div>
           <h1 className="text-xl font-bold text-gray-800">
-            Project DAAN Express
+            Express AI
           </h1>
         </div>
       </div>
@@ -37,7 +37,7 @@ const Navbar = () => {
       {/* Center - Subtitle */}
       <div className="hidden md:block">
         <p className="text-sm text-gray-600 italic">
-          Digital Analytics for Asset-based Navigation of Roads
+          Expert Platform for Road Evaluation and Smart Surveillance
         </p>
       </div>
 
@@ -47,7 +47,7 @@ const Navbar = () => {
           <div className="w-2 h-2 bg-green-500 rounded-full"></div>
           <span>System Online</span>
         </div>
-        
+
         <div className="flex items-center space-x-2">
           <button className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-lg transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -55,7 +55,7 @@ const Navbar = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </button>
-          
+
           <button className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-lg transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />

@@ -40,11 +40,11 @@ const Login = () => {
 
                 <div className="relative z-10">
                     <h1 className="text-6xl font-black text-white tracking-tighter mb-4 drop-shadow-lg">
-                        PROJECT <br />
-                        <span className="text-[#6bc1ff]">DAAN</span>
+                        <span className="text-[#6bc1ff]">Express</span> <br />
+                        <span className="text-white">AI</span>
                     </h1>
                     <p className="text-xl text-blue-100 font-light max-w-md backdrop-blur-sm bg-black/20 p-4 rounded-lg border-l-4 border-[#6bc1ff]">
-                        Digital Analytics and Asset-Based Inspection of Road Networks
+                        Expert Platform for Road Evaluation and Smart Surveillance
                     </p>
                 </div>
 

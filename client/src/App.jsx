@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { SignIn, SignUp, SignedIn, SignedOut } from '@clerk/clerk-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import LandingPage from './pages/LandingPage';
 import Dashboard from './pages/Dashboard';
 import IRICalculator from './pages/IRICalculator';
 import Mapping from './pages/Mapping';
@@ -39,7 +40,7 @@ const LoginPage = () => (
       routing="path"
       path="/login"
       signUpUrl="/register"
-      afterSignInUrl="/dashboard"
+      afterSignInUrl="/app/dashboard"
       appearance={clerkAppearance}
     />
   </AuthLayout>
@@ -52,7 +53,7 @@ const RegisterPage = () => (
       routing="path"
       path="/register"
       signInUrl="/login"
-      afterSignUpUrl="/dashboard"
+      afterSignUpUrl="/app/dashboard"
       appearance={clerkAppearance}
     />
   </AuthLayout>
@@ -63,17 +64,18 @@ function App() {
     <AuthProvider>
       <Router>
         <Routes>
-          {/* Public routes - Clerk handles auth */}
+          {/* Public routes */}
+          <Route path="/" element={<LandingPage />} />
           <Route path="/login/*" element={<LoginPage />} />
           <Route path="/register/*" element={<RegisterPage />} />
 
-          {/* Protected routes */}
-          <Route path="/" element={
+          {/* Protected routes - under /app */}
+          <Route path="/app" element={
             <ProtectedRoute>
               <Layout />
             </ProtectedRoute>
           }>
-            <Route index element={<Navigate to="/dashboard" />} />
+            <Route index element={<Dashboard />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="iri" element={<IRICalculator />} />
             <Route path="mapping" element={<Mapping />} />
@@ -82,8 +84,14 @@ function App() {
             <Route path="settings" element={<div>Settings Component (Coming Soon)</div>} />
           </Route>
 
-          {/* Catch all - redirect to dashboard or login */}
-          <Route path="*" element={<Navigate to="/dashboard" />} />
+          {/* Legacy routes - redirect to new paths */}
+          <Route path="/dashboard" element={<Navigate to="/app/dashboard" />} />
+          <Route path="/iri" element={<Navigate to="/app/iri" />} />
+          <Route path="/mapping" element={<Navigate to="/app/mapping" />} />
+          <Route path="/admin" element={<Navigate to="/app/admin" />} />
+
+          {/* Catch all - redirect to landing */}
+          <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Router>
     </AuthProvider>

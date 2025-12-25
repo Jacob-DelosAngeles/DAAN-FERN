@@ -45,13 +45,12 @@ const AuthLayout = ({ children }) => {
                 {/* Branding Content */}
                 <div className="branding-content">
                     <h1 className="brand-title">
-                        <span className="text-white">Project </span>
-                        <span className="text-blue-500">DAAN </span>
-                        <span className="text-white">Express</span>
+                        <span className="text-blue-500">Express </span>
+                        <span className="text-white">AI</span>
                     </h1>
 
                     <p className="brand-subtitle">
-                        Digital Analytics for Asset-based Navigation of Roads
+                        Expert Platform for Road Evaluation and Smart Surveillance
                     </p>
 
                     <div className="feature-grid">

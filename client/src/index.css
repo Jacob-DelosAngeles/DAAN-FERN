@@ -4,14 +4,19 @@
   * {
     @apply border-gray-200;
   }
-  
+
   body {
     @apply bg-white text-gray-900;
     font-feature-settings: "rlig" 1, "calt" 1;
     margin: 0;
     padding: 0;
-    height: 100vh;
+    min-height: 100vh;
+  }
+
+  /* Only hide overflow on app pages (dashboard, etc) */
+  body.app-page {
     overflow: hidden;
+    height: 100vh;
   }
 }
 
@@ -19,19 +24,19 @@
   .sidebar-gradient {
     @apply bg-gradient-to-br from-blue-500 to-purple-600;
   }
-  
+
   .card-gradient {
     @apply bg-gradient-to-br from-blue-500 to-purple-600;
   }
-  
+
   .section-header {
     @apply bg-gray-700 text-white px-4 py-2 rounded-lg font-semibold text-center mb-4;
   }
-  
+
   .metric-card {
     @apply bg-white rounded-lg shadow-lg p-4 border border-gray-200;
   }
-  
+
   .upload-area {
     @apply border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors;
   }

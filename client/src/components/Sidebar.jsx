@@ -572,9 +572,9 @@ const Sidebar = () => {
     <div className="w-96 bg-blue-50 border-r border-gray-200 h-full overflow-y-auto flex-shrink-0 shadow-sm z-0 custom-scrollbar">
       <div className="p-6">
         <div className="text-center mb-8">
-          <h2 className="text-xl font-bold text-[#262730] mb-1">Project DAAN Express</h2>
+          <h2 className="text-xl font-bold text-[#262730] mb-1">Express AI</h2>
           <div className="h-0.5 w-full bg-blue-500 mb-2 opacity-50"></div>
-          <p className="text-xs text-gray-500 italic">Digital Analytics for Asset-based Navigation of Roads</p>
+          <p className="text-xs text-gray-500 italic">Expert Platform for Road Evaluation and Smart Surveillance</p>
         </div>
 
         {/* Loading Indicator */}

@@ -13,13 +13,13 @@ export const clerkAppearance = {
     localization: {
         signIn: {
             start: {
-                title: 'Sign-in to DAAN Express',
+                title: 'Sign-in to Express AI',
                 subtitle: 'Welcome back! Please sign in to continue',
             },
         },
         signUp: {
             start: {
-                title: 'Sign-up for DAAN Express',
+                title: 'Sign-up for Express AI',
                 subtitle: 'Create an account to get started',
             },
         },

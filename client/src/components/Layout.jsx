@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -14,6 +14,14 @@ const Layout = () => {
     const navigate = useNavigate();
     const [dropdownOpen, setDropdownOpen] = useState(false);
 
+    // Add app-page class to body for overflow handling
+    useEffect(() => {
+        document.body.classList.add('app-page');
+        return () => {
+            document.body.classList.remove('app-page');
+        };
+    }, []);
+
     const handleLogout = () => {
         logout();
         navigate('/login');
@@ -25,7 +33,7 @@ const Layout = () => {
             <header className="bg-white shadow-sm z-[2000] h-16 flex items-center justify-between px-6 border-b border-gray-200 relative">
                 <div className="flex items-center">
                     <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-                        <span className="text-blue-600">DAAN</span> Express
+                        <span className="text-blue-600">Express</span> AI
                     </h1>
                 </div>
 
