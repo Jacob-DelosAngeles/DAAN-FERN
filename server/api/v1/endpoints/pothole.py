@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from typing import List, Dict, Any
 import io
+from functools import lru_cache
 import pandas as pd
 import os
 from pathlib import Path
@@ -201,16 +202,20 @@ async def get_pothole_image(
             # For now, we rely on the DB record being present.
             raise HTTPException(status_code=404, detail="Image not found")
 
-        # 2. Fetch content using internal storage credentials
-        content_bytes = file_handler.storage.get_file_content(image_record.storage_path)
+        # 2. Fetch content stream (optimized for speed)
+        # Bypasses loading full file into memory
+        file_stream = file_handler.storage.get_file_stream(image_record.storage_path)
         
-        if not content_bytes:
-             raise HTTPException(status_code=404, detail="Empty image content")
-
-        # 3. Stream the response
+        # 3. Stream the response with caching headers
+        # Cache for 1 year (31536000 seconds) since these images (pothole frames) are immutable
+        headers = {
+            "Cache-Control": "public, max-age=31536000, immutable"
+        }
+        
         return StreamingResponse(
-            io.BytesIO(content_bytes), 
-            media_type="image/jpeg"
+            file_stream, 
+            media_type="image/jpeg",
+            headers=headers
         )
 
     except Exception as e:

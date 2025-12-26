@@ -44,6 +44,11 @@ class StorageService(ABC):
         """Retrieve file content as bytes"""
         pass
 
+    @abstractmethod
+    def get_file_stream(self, file_path: str):
+        """Retrieve file content as a stream iterator"""
+        pass
+
 class LocalStorageService(StorageService):
     def __init__(self, base_dir: str = "uploads"):
         self.base_dir = Path(base_dir)
@@ -123,6 +128,16 @@ class LocalStorageService(StorageService):
             return full_path.read_bytes()
         except Exception as e:
             raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+
+    def get_file_stream(self, file_path: str):
+        full_path = self.base_dir / file_path
+        if not full_path.exists():
+             raise HTTPException(status_code=404, detail="File not found")
+        
+        # Generator to yield file chunks
+        with open(full_path, "rb") as f:
+            while chunk := f.read(64 * 1024):  # 64KB chunks
+                yield chunk
 
 class R2StorageService(StorageService):
     def __init__(self):
@@ -258,6 +273,17 @@ class R2StorageService(StorageService):
         except Exception as e:
             logger.error(f"R2: Failed to fetch '{file_path}': {e}")
             raise HTTPException(status_code=500, detail=f"Error retrieving file from R2: {str(e)}")
+
+    def get_file_stream(self, file_path: str):
+        try:
+            logger.debug(f"R2: Streaming Key='{file_path}'")
+            # get_object returns a dict with 'Body' which is a StreamingBody
+            response = self.s3_client.get_object(Bucket=self.bucket_name, Key=file_path)
+            # iter_chunks yields bytes
+            return response['Body'].iter_chunks(chunk_size=64 * 1024)
+        except Exception as e:
+            logger.error(f"R2: Failed to stream '{file_path}': {e}")
+            raise HTTPException(status_code=500, detail=f"Error streaming file from R2: {str(e)}")
 
 def get_storage_service() -> StorageService:
     if settings.STORAGE_MODE == "s3":
