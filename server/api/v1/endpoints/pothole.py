@@ -104,26 +104,11 @@ async def process_pothole_data(
                 
 
                 # Resolving Proxy URL (Backend BFF Pattern)
-                # Instead of flaky public R2 links, we point to our own backend
-                # Format: {API_URL}/pothole/image/{filename}
-                # R2_PUBLIC_URL is no longer used for this.
+                # We start with the configured backend URL (e.g. Render/Locahost)
+                backend_base = settings.BACKEND_URL.rstrip('/')
                 
-                server_url = settings.R2_PUBLIC_URL # Fallback/Unused
-                # Construct relative URL - frontend will prepend API_URL
-                # But here we are returning full HTML... 
-                # Ideally we want a full URL.
-                # Assuming the API is accessible at the same host.
-                # Let's use a relative path logic if possible, or build it dynamically?
-                # Actually, simpler: Just return a relative path that the frontend handles?
-                # But the popup HTML is self-contained.
-                # We need the PUBLIC API URL.
-                
-                # For now, let's assume standard /api/v1 structure
-                # We will just direct to pure filename, and let the backend find it.
-                image_url = f"{settings.API_V1_STR}/pothole/image/{image_path}"
-                
-                # Note: This image_path comes from the CSV (e.g. frame_123.jpg)
-                # Ensure this matches 'original_filename' in DB.
+                # Construct the full absolute URL
+                image_url = f"{backend_base}{settings.API_V1_STR}/pothole/image/{image_path}"
                 
                 # Create popup HTML (mirrored from streamlit_app.py)
                 popup_html = f"""

@@ -37,5 +37,10 @@ class Settings:
     R2_PUBLIC_URL: str = os.getenv("R2_PUBLIC_URL", "")  # Required in production
     
     API_V1_STR: str = "/api/v1"
+    
+    # Server configuration
+    # Required for generating absolute proxy URLs (e.g. from Vercel to Render)
+    # Example: https://my-backend.onrender.com
+    BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 settings = Settings()
