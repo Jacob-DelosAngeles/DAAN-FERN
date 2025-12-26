@@ -141,9 +141,23 @@ class IRICalculator:
     def filter_accelerometer_data(self, df, cutoff_freq=10, sampling_rate = None):
 
         if sampling_rate is None:
-            #Estimate sampling rate
-            time_diff = np.diff(df['time'])             # gets time difference between consecutive rows
-            sampling_rate = 1.0/np.median(time_diff)    # 1 / median interval
+            # Estimate sampling rate
+            time_diff = np.diff(df['time'])
+            
+            # Filter out zero time differences (duplicate timestamps)
+            # This happens if time resolution is low (e.g. 1s) but sampling is high
+            valid_diffs = time_diff[time_diff > 1e-6] # Filter excessively small or 0 diffs
+            
+            if len(valid_diffs) > 0:
+                median_diff = np.median(valid_diffs)
+                if median_diff > 0:
+                    sampling_rate = 1.0 / median_diff
+                else:
+                    print("Warning: Median time difference is 0. Using default sampling rate.")
+                    sampling_rate = 50.0 # Default fallback
+            else:
+                 print("Warning: No valid time differences. Using default sampling rate.")
+                 sampling_rate = 50.0 # Default fallback
 
             print(f"Estimated sampling rate: {sampling_rate:.2f} Hz")
 
