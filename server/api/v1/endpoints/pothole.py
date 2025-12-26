@@ -1,5 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from typing import List, Dict, Any
+import io
 import pandas as pd
 import os
 from pathlib import Path
@@ -99,15 +102,28 @@ async def process_pothole_data(
                 image_path = row['image_path'] # e.g. "frame_11030.jpg"
                 confidence = float(row['confidence_score'])
                 
-                # Resolve R2 URL
-                # Check if we have a mapped storage path for this filename
-                if image_path in image_map:
-                    storage_key = image_map[image_path]
-                    image_url = f"{settings.R2_PUBLIC_URL}/{storage_key}"
-                else:
-                    # Fallback: construct URL from file owner's path
-                    full_image_key = f"{file_owner_id}/pothole/{image_path}"
-                    image_url = f"{settings.R2_PUBLIC_URL}/{full_image_key}"
+
+                # Resolving Proxy URL (Backend BFF Pattern)
+                # Instead of flaky public R2 links, we point to our own backend
+                # Format: {API_URL}/pothole/image/{filename}
+                # R2_PUBLIC_URL is no longer used for this.
+                
+                server_url = settings.R2_PUBLIC_URL # Fallback/Unused
+                # Construct relative URL - frontend will prepend API_URL
+                # But here we are returning full HTML... 
+                # Ideally we want a full URL.
+                # Assuming the API is accessible at the same host.
+                # Let's use a relative path logic if possible, or build it dynamically?
+                # Actually, simpler: Just return a relative path that the frontend handles?
+                # But the popup HTML is self-contained.
+                # We need the PUBLIC API URL.
+                
+                # For now, let's assume standard /api/v1 structure
+                # We will just direct to pure filename, and let the backend find it.
+                image_url = f"{settings.API_V1_STR}/pothole/image/{image_path}"
+                
+                # Note: This image_path comes from the CSV (e.g. frame_123.jpg)
+                # Ensure this matches 'original_filename' in DB.
                 
                 # Create popup HTML (mirrored from streamlit_app.py)
                 popup_html = f"""
@@ -176,3 +192,42 @@ async def process_pothole_data(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
+
+@router.get("/image/{filename}")
+async def get_pothole_image(
+    filename: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Proxy endpoint to serve pothole images securely from R2/storage.
+    Bypasses public R2 DNS issues by streaming through the backend.
+    """
+    try:
+        # 1. Find the file record to get the storage path
+        # We search by original filename as that's what we expose in the ID
+        image_record = db.query(UploadModel).filter(
+            UploadModel.category == 'pothole',
+            UploadModel.original_filename == filename
+        ).first()
+
+        if not image_record:
+            # Fallback: try constructing path if we just have the filename
+            # This is tricky without user ID. 
+            # For now, we rely on the DB record being present.
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        # 2. Fetch content using internal storage credentials
+        content_bytes = file_handler.storage.get_file_content(image_record.storage_path)
+        
+        if not content_bytes:
+             raise HTTPException(status_code=404, detail="Empty image content")
+
+        # 3. Stream the response
+        return StreamingResponse(
+            io.BytesIO(content_bytes), 
+            media_type="image/jpeg"
+        )
+
+    except Exception as e:
+        logger.error(f"Error serving image proxy {filename}: {e}")
+        raise HTTPException(status_code=404, detail="Image not found")
