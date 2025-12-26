@@ -180,7 +180,8 @@ async def process_pothole_data(
 
 
 @router.get("/image/{filename}")
-async def get_pothole_image(
+@router.get("/image/{filename}")
+def get_pothole_image(
     filename: str,
     db: Session = Depends(get_db)
 ):

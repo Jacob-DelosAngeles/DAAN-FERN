@@ -6,13 +6,23 @@ from typing import Optional, List
 from datetime import datetime
 
 # SQLAlchemy Models
+from sqlalchemy import Index
+
 class UploadModel(Base):
     __tablename__ = "uploads"
+    
+    # Composite index for the image proxy lookup
+    # Improves: db.query(UploadModel).filter(category='pothole', original_filename=filename)
+    __table_args__ = (
+        Index('idx_pothole_lookup', 'category', 'original_filename'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     filename = Column(String, nullable=False)
-    original_filename = Column(String, nullable=False)
+    filename = Column(String, nullable=False)
+    original_filename = Column(String, nullable=False, index=True) # Added index for fast proxy lookup
+    file_type = Column(String, nullable=False)  # csv, jpg, png, etc.
     file_type = Column(String, nullable=False)  # csv, jpg, png, etc.
     category = Column(String, nullable=False, index=True)  # pothole, iri, vehicle
     storage_path = Column(String, nullable=False)  # Path in storage (local or R2)
