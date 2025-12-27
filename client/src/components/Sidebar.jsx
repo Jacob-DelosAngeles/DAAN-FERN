@@ -126,16 +126,30 @@ const PotholeUploadSection = ({ title, onUpload, icon }) => {
     setLoading(true);
     setError(null);
     setSuccess(false);
-    setUploadProgress({ current: 0, total: 1, phase: 'Uploading files...' });
+    setUploadProgress({ current: 0, total: imageFiles.length, phase: 'Starting upload...' });
 
     try {
-      // Pass all files at once - handlePotholeUpload handles batching internally
+      // Pass all files at once with a progress callback
       const allFiles = [csvFile, ...imageFiles];
 
-      // The onUpload handler (handlePotholeUpload) will batch the images internally
-      await onUpload(allFiles);
+      // Progress callback that updates the UI
+      const onProgress = (progress) => {
+        if (progress.phase === 'csv') {
+          setUploadProgress({ current: 0, total: imageFiles.length, phase: 'Uploading CSV...' });
+        } else if (progress.phase === 'images') {
+          setUploadProgress({
+            current: progress.current,
+            total: progress.total,
+            phase: `Uploading images ${progress.current}/${progress.total}...`
+          });
+        } else if (progress.phase === 'processing') {
+          setUploadProgress({ current: imageFiles.length, total: imageFiles.length, phase: 'Processing data...' });
+        }
+      };
 
-      setUploadProgress({ current: 1, total: 1, phase: 'Complete!' });
+      await onUpload(allFiles, onProgress);
+
+      setUploadProgress({ current: imageFiles.length, total: imageFiles.length, phase: 'Complete!' });
       setSuccess(true);
       setCsvFile(null);
       setImageFiles([]);
@@ -149,7 +163,7 @@ const PotholeUploadSection = ({ title, onUpload, icon }) => {
   // Calculate progress percentage
   const progressPercent = uploadProgress.total > 0
     ? Math.round((uploadProgress.current / uploadProgress.total) * 100)
-    : 0;
+    : (loading ? 0 : 100); // Show 100% when not loading or 0% if loading with no images
 
 
   return (
@@ -516,8 +530,9 @@ const Sidebar = () => {
   };
 
 
-  // Updated to handle array of files with CHUNKED UPLOAD
-  const handlePotholeUpload = async (files) => {
+  // Updated to use DIRECT-TO-R2 upload for images (fast, parallel, no OOM!)
+  // CSV still goes through backend, but images upload directly to R2
+  const handlePotholeUpload = async (files, onProgress = null) => {
     // files is now an array: [csv, ...images]
     const csvFile = files.find(f => f.name.toLowerCase().endsWith('.csv'));
     const imageFiles = files.filter(f => !f.name.toLowerCase().endsWith('.csv'));
@@ -526,10 +541,10 @@ const Sidebar = () => {
       throw new Error("No CSV file found in upload");
     }
 
-    const BATCH_SIZE = 10; // Upload 10 images at a time to prevent OOM on Render's 512MB
-
-    // Step 1: Upload CSV first 
+    // Step 1: Upload CSV through backend (still needed for processing)
     console.log('Uploading CSV first...');
+    if (onProgress) onProgress({ phase: 'csv', current: 0, total: imageFiles.length });
+
     const csvUploadRes = await fileService.uploadFile([csvFile], 'pothole');
 
     if (!csvUploadRes.success) {
@@ -543,29 +558,40 @@ const Sidebar = () => {
       throw new Error("CSV upload failed or not found in response");
     }
 
-    // Step 2: Upload images in batches
+    // Step 2: Upload images DIRECTLY TO R2 (fast, bypasses backend!)
     if (imageFiles.length > 0) {
-      const batches = [];
-      for (let i = 0; i < imageFiles.length; i += BATCH_SIZE) {
-        batches.push(imageFiles.slice(i, i + BATCH_SIZE));
-      }
+      console.log(`Uploading ${imageFiles.length} images directly to R2...`);
 
-      console.log(`Uploading ${imageFiles.length} images in ${batches.length} batches...`);
+      try {
+        // Use the new direct-to-R2 upload method
+        const directUploadProgress = (progress) => {
+          if (onProgress) {
+            if (progress.phase === 'presigning') {
+              onProgress({ phase: 'images', current: 0, total: imageFiles.length });
+            } else if (progress.phase === 'uploading') {
+              onProgress({ phase: 'images', current: progress.current, total: progress.total });
+            } else if (progress.phase === 'complete') {
+              onProgress({ phase: 'images', current: imageFiles.length, total: imageFiles.length });
+            }
+          }
+        };
 
-      for (let i = 0; i < batches.length; i++) {
-        const batch = batches[i];
-        console.log(`Uploading batch ${i + 1} of ${batches.length} (${batch.length} images)...`);
-
-        try {
+        const uploadResult = await fileService.uploadDirectToR2(imageFiles, 'pothole', directUploadProgress);
+        console.log(`Direct R2 upload complete: ${uploadResult.success} succeeded, ${uploadResult.failed} failed`);
+      } catch (directErr) {
+        console.error('Direct R2 upload failed, falling back to backend upload:', directErr);
+        // Fallback to backend upload if direct upload fails
+        for (let i = 0; i < imageFiles.length; i += 5) {
+          const batch = imageFiles.slice(i, i + 5);
+          if (onProgress) onProgress({ phase: 'images', current: i, total: imageFiles.length });
           await fileService.uploadFile(batch, 'pothole');
-        } catch (batchErr) {
-          console.warn(`Batch ${i + 1} failed:`, batchErr);
-          // Continue with next batch instead of failing entirely
         }
       }
     }
 
     // Step 3: Process the CSV to get pothole data
+    if (onProgress) onProgress({ phase: 'processing', current: 0, total: 0 });
+
     const processRes = await fileService.processPotholes(csvResult.filename);
     if (processRes.success) {
       addPotholeFile({

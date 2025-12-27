@@ -285,6 +285,34 @@ class R2StorageService(StorageService):
             logger.error(f"R2: Failed to stream '{file_path}': {e}")
             raise HTTPException(status_code=500, detail=f"Error streaming file from R2: {str(e)}")
 
+    def generate_presigned_upload_url(self, object_key: str, content_type: str = "image/jpeg", expires_in: int = 300) -> str:
+        """
+        Generate a presigned URL for direct browser-to-R2 upload.
+        
+        Args:
+            object_key: The destination path in the bucket (e.g., "1/pothole/image.jpg")
+            content_type: MIME type of the file being uploaded
+            expires_in: URL validity in seconds (default 5 minutes)
+        
+        Returns:
+            Presigned URL that allows PUT upload directly to R2
+        """
+        try:
+            url = self.s3_client.generate_presigned_url(
+                ClientMethod='put_object',
+                Params={
+                    'Bucket': self.bucket_name, 
+                    'Key': object_key,
+                    'ContentType': content_type
+                },
+                ExpiresIn=expires_in
+            )
+            logger.info(f"R2: Generated presigned upload URL for '{object_key}'")
+            return url
+        except Exception as e:
+            logger.error(f"R2: Failed to generate presigned upload URL: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to generate upload URL: {str(e)}")
+
 def get_storage_service() -> StorageService:
     if settings.STORAGE_MODE == "s3":
         return R2StorageService()

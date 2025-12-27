@@ -214,6 +214,124 @@ export const fileService = {
             console.error('Delete file error:', error);
             return { success: false, message: error.response?.data?.detail || 'Delete failed' };
         }
+    },
+
+    // ============================================
+    // DIRECT-TO-R2 UPLOAD (Fast, bypasses backend)
+    // ============================================
+
+    /**
+     * Get presigned URLs for batch upload directly to R2
+     */
+    getPresignedUrls: async (files, category = 'pothole') => {
+        try {
+            const fileRequests = files.map(file => ({
+                filename: file.name,
+                content_type: file.type || 'image/jpeg',
+                category: category
+            }));
+
+            const response = await api.post('/presign/upload/batch', { files: fileRequests });
+            return response.data;
+        } catch (error) {
+            console.error('Presign error:', error);
+            throw new Error(error.response?.data?.detail || 'Failed to get upload URLs');
+        }
+    },
+
+    /**
+     * Upload a single file directly to R2 using presigned URL
+     */
+    uploadToR2: async (file, presignedUrl) => {
+        try {
+            // PUT directly to R2 (no auth header needed - signed URL has credentials)
+            await axios.put(presignedUrl, file, {
+                headers: {
+                    'Content-Type': file.type || 'image/jpeg'
+                }
+            });
+            return { success: true };
+        } catch (error) {
+            console.error('R2 upload error:', error);
+            return { success: false, message: error.message };
+        }
+    },
+
+    /**
+     * Register a file with the backend after direct R2 upload
+     */
+    registerUpload: async (objectKey, originalFilename, fileSize, contentType, category = 'pothole') => {
+        try {
+            const response = await api.post('/presign/register', {
+                object_key: objectKey,
+                original_filename: originalFilename,
+                file_size: fileSize,
+                content_type: contentType,
+                category: category
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Register upload error:', error);
+            return { success: false, message: error.response?.data?.detail || 'Failed to register upload' };
+        }
+    },
+
+    /**
+     * Upload multiple files directly to R2 (parallel, fast!)
+     * @param files Array of File objects
+     * @param category Upload category
+     * @param onProgress Callback with { current, total, phase }
+     */
+    uploadDirectToR2: async (files, category = 'pothole', onProgress = null) => {
+        const results = { success: 0, failed: 0 };
+
+        // Step 1: Get presigned URLs for all files
+        if (onProgress) onProgress({ phase: 'presigning', current: 0, total: files.length });
+        const presignResponse = await fileService.getPresignedUrls(files, category);
+        const urls = presignResponse.urls;
+
+        if (!urls || urls.length === 0) {
+            throw new Error('No presigned URLs received');
+        }
+
+        // Step 2: Upload all files in parallel (limited concurrency)
+        const CONCURRENCY = 10; // Upload 10 files at a time
+
+        for (let i = 0; i < urls.length; i += CONCURRENCY) {
+            const batch = urls.slice(i, i + CONCURRENCY);
+            const batchFiles = files.slice(i, i + CONCURRENCY);
+
+            if (onProgress) onProgress({ phase: 'uploading', current: i, total: files.length });
+
+            // Upload batch in parallel
+            const uploadPromises = batch.map((urlInfo, idx) => {
+                const file = batchFiles[idx];
+                return fileService.uploadToR2(file, urlInfo.upload_url)
+                    .then(res => ({ ...res, urlInfo, file }));
+            });
+
+            const batchResults = await Promise.all(uploadPromises);
+
+            // Step 3: Register successful uploads
+            for (const result of batchResults) {
+                if (result.success) {
+                    await fileService.registerUpload(
+                        result.urlInfo.object_key,
+                        result.file.name,
+                        result.file.size,
+                        result.file.type || 'image/jpeg',
+                        category
+                    );
+                    results.success++;
+                } else {
+                    results.failed++;
+                }
+            }
+        }
+
+        if (onProgress) onProgress({ phase: 'complete', current: files.length, total: files.length });
+
+        return results;
     }
 };
 
