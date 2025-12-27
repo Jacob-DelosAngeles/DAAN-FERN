@@ -126,6 +126,14 @@ class IRIService:
                 processing_time=processing_time,
                 sampling_rate=0.0
             )
+        finally:
+            # Force garbage collection to free memory on constrained environments (Render)
+            import gc
+            if 'df' in locals(): del df
+            if 'processed_df' in locals(): del processed_df
+            if 'df_filtered' in locals(): del df_filtered
+            if 'vertical_accel' in locals(): del vertical_accel
+            gc.collect()
     
     async def validate_file_format(self, file_path: str) -> Tuple[bool, str, int]:
         """

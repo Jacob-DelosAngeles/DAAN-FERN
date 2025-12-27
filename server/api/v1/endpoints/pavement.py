@@ -21,6 +21,8 @@ class PavementSegment(BaseModel):
     points: List[List[float]] # [[lat, lon], [lat, lon]]
     type: str
     color: str
+    start_time: Optional[Any] = None
+    end_time: Optional[Any] = None
 
 class PavementProcessResponse(BaseModel):
     success: bool
@@ -88,20 +90,39 @@ async def process_pavement_data(
         current_points = []
         
         # Logic to group consecutive points
+        segment_start_time = None
+        current_end_time = None
+
         for _, row in df.iterrows():
             p_type = row['type']
             lat = float(row['latitude'])
             lon = float(row['longitude'])
             
+            # Extract timestamp
+            timestamp = None
+            if 'timestamp' in row:
+                timestamp = row['timestamp']
+            elif 'time' in row:
+                timestamp = row['time']
+
+            # Set start time for new segment
+            if not current_points:
+                segment_start_time = timestamp
+            
+            current_end_time = timestamp
+
             # If type changes, save segment
             if current_type is not None and p_type != current_type:
                 if len(current_points) >= 2:
                     segments.append({
                         "points": current_points,
                         "type": current_type,
-                        "color": color_map.get(current_type, '#808080')
+                        "color": color_map.get(current_type, '#808080'),
+                        "start_time": segment_start_time,
+                        "end_time": current_end_time
                     })
                 current_points = []
+                segment_start_time = timestamp # Reset start time for next segment containing this point
                 
             current_points.append([lat, lon])
             current_type = p_type
@@ -111,7 +132,9 @@ async def process_pavement_data(
             segments.append({
                 "points": current_points,
                 "type": current_type,
-                "color": color_map.get(current_type, '#808080')
+                "color": color_map.get(current_type, '#808080'),
+                "start_time": segment_start_time,
+                "end_time": current_end_time
             })
 
         return {

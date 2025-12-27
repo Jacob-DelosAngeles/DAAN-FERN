@@ -103,13 +103,30 @@ async def process_pothole_data(
                 image_path = row['image_path'] # e.g. "frame_11030.jpg"
                 confidence = float(row['confidence_score'])
                 
-
-                # Resolving Proxy URL (Backend BFF Pattern)
-                # We start with the configured backend URL (e.g. Render/Locahost)
-                backend_base = settings.BACKEND_URL.rstrip('/')
+                # Extract timestamp (case-insensitive check)
+                timestamp = None
+                # Normalize keys to lowercase for checking
+                row_keys_lower = {k.lower(): k for k in row.keys()}
                 
-                # Construct the full absolute URL
-                image_url = f"{backend_base}{settings.API_V1_STR}/pothole/image/{image_path}"
+                if 'timestamp' in row_keys_lower:
+                    timestamp = row[row_keys_lower['timestamp']]
+                elif 'time' in row_keys_lower:
+                    timestamp = row[row_keys_lower['time']]
+                elif 'date' in row_keys_lower:
+                    timestamp = row[row_keys_lower['date']]
+                
+
+                # Generate direct R2 URL (Presigned) to bypass backend proxy and save memory
+                storage_path = image_map.get(image_path)
+                
+                if not storage_path:
+                    # Fallback: If image not in DB (CSV-only upload), try to guess the path
+                    # Standard path: user_id/pothole/filename
+                    # Note: We can't know for sure if it was renamed (e.g. _1), but this works for clean states
+                    storage_path = f"{file_owner_id}/pothole/{image_path}"
+                
+                # Generate URL using the storage service (generates presigned URL for R2)
+                image_url = file_handler.storage.get_file_url(storage_path)
                 
                 # Create popup HTML (mirrored from streamlit_app.py)
                 popup_html = f"""
@@ -145,6 +162,7 @@ async def process_pothole_data(
                     'confidence': confidence,
                     'image_path': image_path,
                     'image_url': image_url,
+                    'timestamp': timestamp,
                     'id': idx
                 })
             except Exception as e:

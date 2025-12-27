@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import IRICalculator from './pages/IRICalculator';
 import Mapping from './pages/Mapping';
 import AdminDashboard from './pages/AdminDashboard';
+import Analytics from './pages/Analytics';
 import Layout from './components/Layout';
 import AuthLayout from './components/Auth/AuthLayout';
 import { clerkAppearance } from './utils/clerkTheme';
@@ -77,8 +78,9 @@ function App() {
           }>
             <Route index element={<Dashboard />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="iri" element={<IRICalculator />} />
-            <Route path="mapping" element={<Mapping />} />
+            <Route path="iri" element={<Navigate to="/app/analytics" />} />
+            <Route path="mapping" element={<Navigate to="/app/dashboard" />} />
+            <Route path="analytics" element={<Analytics />} />
             <Route path="admin" element={<AdminDashboard />} />
             <Route path="reports" element={<div>Reports Component (Coming Soon)</div>} />
             <Route path="settings" element={<div>Settings Component (Coming Soon)</div>} />

@@ -26,6 +26,7 @@ class VehicleDetection(BaseModel):
     lon: float
     type: str
     count: int = 1
+    timestamp: Optional[Any] = None
 
 class VehicleProcessResponse(BaseModel):
     success: bool
@@ -102,10 +103,18 @@ async def process_vehicle_data(
         # Convert to list of objects
         result_data = []
         for _, row in df.iterrows():
+            # Extract timestamp if available
+            timestamp = None
+            if 'timestamp' in row:
+                timestamp = row['timestamp']
+            elif 'time' in row:
+                timestamp = row['time']
+
             result_data.append({
                 "lat": float(row['latitude']),
                 "lon": float(row['longitude']),
                 "type": row['vehicle_type'],
+                "timestamp": timestamp,
                 "count": 1
             })
         
