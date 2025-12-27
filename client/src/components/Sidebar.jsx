@@ -117,10 +117,6 @@ const PotholeUploadSection = ({ title, onUpload, icon }) => {
     multiple: true
   });
 
-  // Batch upload configuration
-  const BATCH_SIZE = 5; // Upload 5 images at a time to avoid OOM
-  const BATCH_DELAY_MS = 500; // Wait 500ms between batches
-
   const handleUpload = async () => {
     if (!csvFile) {
       setError('CSV file is required');
@@ -130,39 +126,16 @@ const PotholeUploadSection = ({ title, onUpload, icon }) => {
     setLoading(true);
     setError(null);
     setSuccess(false);
-    setUploadProgress({ current: 0, total: imageFiles.length + 1, phase: 'Uploading CSV...' });
+    setUploadProgress({ current: 0, total: 1, phase: 'Uploading files...' });
 
     try {
-      // Phase 1: Upload CSV first (this creates the parent record)
-      await onUpload([csvFile]);
-      setUploadProgress(prev => ({ ...prev, current: 1, phase: 'CSV uploaded' }));
+      // Pass all files at once - handlePotholeUpload handles batching internally
+      const allFiles = [csvFile, ...imageFiles];
 
-      // Phase 2: Upload images in batches
-      if (imageFiles.length > 0) {
-        const totalBatches = Math.ceil(imageFiles.length / BATCH_SIZE);
+      // The onUpload handler (handlePotholeUpload) will batch the images internally
+      await onUpload(allFiles);
 
-        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-          const startIdx = batchIndex * BATCH_SIZE;
-          const endIdx = Math.min(startIdx + BATCH_SIZE, imageFiles.length);
-          const batch = imageFiles.slice(startIdx, endIdx);
-
-          setUploadProgress({
-            current: 1 + startIdx,
-            total: imageFiles.length + 1,
-            phase: `Uploading images ${startIdx + 1}-${endIdx} of ${imageFiles.length}...`
-          });
-
-          // Upload this batch
-          await onUpload(batch);
-
-          // Small delay between batches to let server breathe
-          if (batchIndex < totalBatches - 1) {
-            await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
-          }
-        }
-      }
-
-      setUploadProgress({ current: imageFiles.length + 1, total: imageFiles.length + 1, phase: 'Complete!' });
+      setUploadProgress({ current: 1, total: 1, phase: 'Complete!' });
       setSuccess(true);
       setCsvFile(null);
       setImageFiles([]);
@@ -177,6 +150,7 @@ const PotholeUploadSection = ({ title, onUpload, icon }) => {
   const progressPercent = uploadProgress.total > 0
     ? Math.round((uploadProgress.current / uploadProgress.total) * 100)
     : 0;
+
 
   return (
     <div className="mb-6">
@@ -552,7 +526,7 @@ const Sidebar = () => {
       throw new Error("No CSV file found in upload");
     }
 
-    const BATCH_SIZE = 30; // Upload 30 images at a time to prevent timeout
+    const BATCH_SIZE = 10; // Upload 10 images at a time to prevent OOM on Render's 512MB
 
     // Step 1: Upload CSV first 
     console.log('Uploading CSV first...');
