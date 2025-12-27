@@ -62,23 +62,51 @@ async def upload_files(
     
     # ---------------------------------------------------------
     # SMART FILTERING (STRICT MODE) FOR POTHOLE UPLOADS
+    # Now supports batched uploads where CSV was uploaded first
     # ---------------------------------------------------------
     allowed_pothole_images = None
     if type == "pothole":
-        # Scan for the CSV file first to build the guest list
+        # First, check if there's a CSV in the current upload batch
         csv_file = next((f for f in files if f.filename.lower().endswith('.csv')), None)
+        
         if csv_file:
+            # CSV in current batch - use it for filtering
             try:
-                # Read CSV to find allowed images
                 csv_file.file.seek(0)
                 df_scan = pd.read_csv(csv_file.file)
                 if 'image_path' in df_scan.columns:
                     allowed_pothole_images = set(df_scan['image_path'].dropna().unique())
-                
-                # Reset pointer for actual processing loop
                 csv_file.file.seek(0)
             except Exception as e:
-                # If scan fails, we default to allowing all (or blocking all? Let's allow for now to be safe)
+                logger.warning(f"Failed to scan CSV for image filtering: {e}")
+                allowed_pothole_images = None
+        else:
+            # No CSV in this batch - look for the most recent pothole CSV in database
+            try:
+                existing_csv = db.query(UploadModel).filter(
+                    UploadModel.user_id == current_user.id,
+                    UploadModel.category == 'pothole',
+                    UploadModel.file_type == 'csv'
+                ).order_by(UploadModel.upload_date.desc()).first()
+                
+                if existing_csv:
+                    pothole_csv_upload_id = existing_csv.id
+                    # Fetch CSV content from storage and extract allowed images
+                    try:
+                        csv_content = file_handler.storage.get_file_content(existing_csv.storage_path)
+                        df_scan = pd.read_csv(BytesIO(csv_content))
+                        if 'image_path' in df_scan.columns:
+                            allowed_pothole_images = set(df_scan['image_path'].dropna().unique())
+                        logger.info(f"Using existing CSV for filtering: {existing_csv.original_filename} ({len(allowed_pothole_images) if allowed_pothole_images else 0} images)")
+                    except Exception as e:
+                        logger.warning(f"Failed to read existing CSV for filtering: {e}")
+                        # Allow all images if we can't read the CSV
+                        allowed_pothole_images = None
+                else:
+                    logger.warning("No CSV found - allowing all images without filtering")
+                    allowed_pothole_images = None
+            except Exception as e:
+                logger.warning(f"Database query for existing CSV failed: {e}")
                 allowed_pothole_images = None
 
     for file in files:
