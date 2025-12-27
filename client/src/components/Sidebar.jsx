@@ -94,6 +94,9 @@ const PotholeUploadSection = ({ title, onUpload, icon }) => {
   const [csvFile, setCsvFile] = useState(null);
   const [imageFiles, setImageFiles] = useState([]);
 
+  // Progress tracking
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0, phase: '' });
+
   const handleCsvDrop = (acceptedFiles) => {
     if (acceptedFiles.length > 0) setCsvFile(acceptedFiles[0]);
   };
@@ -114,8 +117,12 @@ const PotholeUploadSection = ({ title, onUpload, icon }) => {
     multiple: true
   });
 
+  // Batch upload configuration
+  const BATCH_SIZE = 5; // Upload 5 images at a time to avoid OOM
+  const BATCH_DELAY_MS = 500; // Wait 500ms between batches
+
   const handleUpload = async () => {
-    if (!csvFile) { // Images are optional generally, but user asked for both. Let's make CSV required at least.
+    if (!csvFile) {
       setError('CSV file is required');
       return;
     }
@@ -123,12 +130,39 @@ const PotholeUploadSection = ({ title, onUpload, icon }) => {
     setLoading(true);
     setError(null);
     setSuccess(false);
+    setUploadProgress({ current: 0, total: imageFiles.length + 1, phase: 'Uploading CSV...' });
 
     try {
-      // Bundle CSV first, then images
-      const filesToUpload = [csvFile, ...imageFiles];
-      await onUpload(filesToUpload);
+      // Phase 1: Upload CSV first (this creates the parent record)
+      await onUpload([csvFile]);
+      setUploadProgress(prev => ({ ...prev, current: 1, phase: 'CSV uploaded' }));
 
+      // Phase 2: Upload images in batches
+      if (imageFiles.length > 0) {
+        const totalBatches = Math.ceil(imageFiles.length / BATCH_SIZE);
+
+        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+          const startIdx = batchIndex * BATCH_SIZE;
+          const endIdx = Math.min(startIdx + BATCH_SIZE, imageFiles.length);
+          const batch = imageFiles.slice(startIdx, endIdx);
+
+          setUploadProgress({
+            current: 1 + startIdx,
+            total: imageFiles.length + 1,
+            phase: `Uploading images ${startIdx + 1}-${endIdx} of ${imageFiles.length}...`
+          });
+
+          // Upload this batch
+          await onUpload(batch);
+
+          // Small delay between batches to let server breathe
+          if (batchIndex < totalBatches - 1) {
+            await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+          }
+        }
+      }
+
+      setUploadProgress({ current: imageFiles.length + 1, total: imageFiles.length + 1, phase: 'Complete!' });
       setSuccess(true);
       setCsvFile(null);
       setImageFiles([]);
@@ -138,6 +172,11 @@ const PotholeUploadSection = ({ title, onUpload, icon }) => {
       setLoading(false);
     }
   };
+
+  // Calculate progress percentage
+  const progressPercent = uploadProgress.total > 0
+    ? Math.round((uploadProgress.current / uploadProgress.total) * 100)
+    : 0;
 
   return (
     <div className="mb-6">
@@ -168,13 +207,29 @@ const PotholeUploadSection = ({ title, onUpload, icon }) => {
           </div>
         </div>
 
+        {/* Progress Bar (shown during upload) */}
+        {loading && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs text-gray-600">
+              <span>{uploadProgress.phase}</span>
+              <span>{progressPercent}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Upload Button */}
         <button
           onClick={handleUpload}
           disabled={loading || !csvFile}
           className={`w-full py-2 rounded text-xs font-semibold text-white transition-colors ${loading || !csvFile ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
         >
-          {loading ? 'Uploading...' : 'Upload Batch'}
+          {loading ? `Uploading... ${progressPercent}%` : 'Upload Batch'}
         </button>
 
         {error && (

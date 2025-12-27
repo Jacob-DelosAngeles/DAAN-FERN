@@ -298,7 +298,21 @@ async def upload_files(
                 duration=0.0
             ))
         finally:
-            # Release memory after each file to prevent exhaustion on large uploads
+            # Aggressive memory cleanup after each file
+            try:
+                # Close and release the file handle
+                if hasattr(file, 'file') and file.file:
+                    file.file.close()
+            except:
+                pass
+            
+            # Clear any dataframe references
+            if 'df' in locals():
+                del df
+            if 'df_scan' in locals():
+                del df_scan
+            
+            # Force garbage collection (critical for Render's 512MB limit)
             gc.collect()
             
     return results
