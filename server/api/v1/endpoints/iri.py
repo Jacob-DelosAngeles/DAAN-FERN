@@ -24,7 +24,8 @@ file_handler = FileHandler()
 @router.post("/compute/{filename}", response_model=IRIComputationResponse)
 async def compute_iri(
     filename: str,
-    request: IRIComputationRequest = IRIComputationRequest(),
+    segment_length: int = Query(default=100, ge=25, le=500, description="Segment length in meters"),
+    cutoff_freq: float = Query(default=10.0, description="Cutoff frequency for filtering"),
     current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -48,13 +49,13 @@ async def compute_iri(
 
         file_obj = BytesIO(content_bytes)
         
-        # Compute IRI
-        # process_file_and_compute_iri now needs to accept a file-like object
-        # We verified IRICalculator.load_data uses pd.read_csv which accepts file objects.
-        # However, iri_service.process_file_and_compute_iri signature calls for file_path: str
-        # but Python is dynamic. Let's hope it passes it through to load_data.
-        # Check iri_service.py: it calls self.calculator.load_data(file_path).
-        # So passing file_obj should work!
+        # Create request object from query parameters
+        request = IRIComputationRequest(
+            segment_length=segment_length,
+            cutoff_freq=cutoff_freq
+        )
+        
+        # Compute IRI with configurable segment length
         result = await iri_service.process_file_and_compute_iri(file_obj, request)
         
         if not result.success:

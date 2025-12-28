@@ -141,9 +141,8 @@ export const fileService = {
 
     computeIRI: async (filename, segmentLength = 100) => {
         try {
-            const response = await api.post(`/iri/compute/${filename}`, {
-                segment_length: segmentLength
-            });
+            // Use query parameters instead of JSON body to avoid CORS preflight issues
+            const response = await api.post(`/iri/compute/${filename}?segment_length=${segmentLength}`);
             return response.data;
         } catch (error) {
             console.error('IRI computation error:', error);
