@@ -51,12 +51,35 @@ async def process_pothole_data(
     
     # ============================================
     # CACHE CHECK - Return cached data if available
+    # We regenerate presigned URLs since they expire after 1 hour
     # ============================================
     if upload_record.cached_data:
         try:
             cached_response = json.loads(upload_record.cached_data)
-            logger.info(f"Returning cached pothole data for {filename}")
-            return cached_response
+            
+            # Check if cache has storage_path (new format) - invalidate old caches
+            if cached_response.get('data') and len(cached_response['data']) > 0:
+                first_marker = cached_response['data'][0]
+                if not first_marker.get('storage_path'):
+                    # Old cache format without storage_path - need to re-process
+                    logger.info(f"Invalidating old cache for {filename} (missing storage_path)")
+                    upload_record.cached_data = None
+                    db.commit()
+                else:
+                    # Regenerate presigned URLs for all markers (they expire after 1 hour)
+                    for marker in cached_response['data']:
+                        storage_path = marker.get('storage_path')
+                        if storage_path:
+                            # Regenerate fresh presigned URL
+                            fresh_url = file_handler.storage.get_file_url(storage_path)
+                            old_url = marker.get('_cached_url', '')
+                            marker['image_url'] = fresh_url
+                            # Also update popup_html with fresh URL
+                            if old_url and old_url in marker.get('popup_html', ''):
+                                marker['popup_html'] = marker['popup_html'].replace(old_url, fresh_url)
+                    
+                    logger.info(f"Returning cached pothole data for {filename} (regenerated URLs)")
+                    return cached_response
         except json.JSONDecodeError:
             # Invalid cache, proceed to re-process
             pass
@@ -162,6 +185,8 @@ async def process_pothole_data(
                     'confidence': confidence,
                     'image_path': image_path,
                     'image_url': image_url,
+                    'storage_path': storage_path,  # Store for URL regeneration from cache
+                    '_cached_url': image_url,  # Store original URL for popup replacement
                     'timestamp': timestamp,
                     'id': idx
                 })
