@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 import os
+import gc
 from io import BytesIO
 
 from models.iri_models import IRIComputationRequest, IRIComputationResponse, ErrorResponse
@@ -33,6 +34,10 @@ async def compute_iri(
     Compute IRI values for an uploaded file.
     Uses GET to avoid CORS preflight issues.
     """
+    content_bytes = None
+    file_obj = None
+    result = None
+    
     try:
         # 1. Find the file in the database - ALL users see shared data
         upload_record = db.query(UploadModel).filter(
@@ -67,6 +72,14 @@ async def compute_iri(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"IRI computation failed: {str(e)}")
+    finally:
+        # Aggressive memory cleanup to prevent OOM on sequential recalculations
+        if file_obj:
+            file_obj.close()
+        del content_bytes
+        del file_obj
+        gc.collect()
+
 
 
 @router.get("/cached/{filename}")
