@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, AlertCircle, CheckCircle, Map as MapIcon, Car, AlertTriangle, Activity, Layers, Trash } from 'lucide-react';
+import { Upload, AlertCircle, CheckCircle, Map as MapIcon, Car, AlertTriangle, Activity, Layers, Trash, X } from 'lucide-react';
 import { fileService } from '../services/api';
 import useAppStore from '../store/useAppStore';
 // ... (imports)
@@ -269,52 +269,71 @@ const Sidebar = () => {
   const [segmentLength, setSegmentLength] = useState(100); // Default 100m
   const [isRecalculating, setIsRecalculating] = useState(false);
 
-  // Recalculate IRI for all loaded files when segment length changes
+  // Recalculate IRI for VISIBLE files only when segment length changes
   // Uses delays between files to allow backend GC and prevent OOM
   const recalculateAllIri = async (newSegmentLength) => {
-    if (iriFiles.length === 0) return;
+    // Only process visible files to reduce load
+    const visibleFiles = iriFiles.filter(f => f.visible);
+    if (visibleFiles.length === 0) {
+      alert('No visible IRI files to recalculate. Check at least one file.');
+      return;
+    }
 
     setIsRecalculating(true);
-    const updatedFiles = [];
-    const DELAY_BETWEEN_FILES = 3000; // 3 seconds to allow backend GC
+    const DELAY_BETWEEN_FILES = 5000; // 5 seconds to allow backend GC
+    let successCount = 0;
 
-    for (let i = 0; i < iriFiles.length; i++) {
-      const file = iriFiles[i];
+    for (let i = 0; i < visibleFiles.length; i++) {
+      const file = visibleFiles[i];
 
       try {
         // Add delay between files (not before first one)
         if (i > 0) {
+          console.log(`Waiting ${DELAY_BETWEEN_FILES / 1000}s before next file...`);
           await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_FILES));
         }
+
+        console.log(`Recalculating ${file.filename} (${i + 1}/${visibleFiles.length})...`);
 
         // Force recompute with new segment length
         const computeRes = await fileService.computeIRI(file.filename, newSegmentLength);
         if (computeRes.success) {
-          updatedFiles.push({
-            ...file,
-            segments: computeRes.segments,
-            raw_data: computeRes.raw_data,
-            filtered_data: computeRes.filtered_data,
-            stats: {
-              averageIri: computeRes.segments.reduce((acc, seg) => acc + seg.iri_value, 0) / computeRes.segments.length,
-              maxIri: Math.max(...computeRes.segments.map(s => s.iri_value)),
-              avgSpeed: computeRes.segments.reduce((acc, seg) => acc + seg.mean_speed, 0) / computeRes.segments.length,
-              totalDistance: computeRes.segments[computeRes.segments.length - 1].distance_end,
-              totalSegments: computeRes.total_segments
-            }
-          });
+          // Update this file in the full list
+          setIriFiles(prev => prev.map(f =>
+            f.id === file.id ? {
+              ...f,
+              segments: computeRes.segments,
+              raw_data: computeRes.raw_data,
+              filtered_data: computeRes.filtered_data,
+              stats: {
+                averageIri: computeRes.segments.reduce((acc, seg) => acc + seg.iri_value, 0) / computeRes.segments.length,
+                maxIri: Math.max(...computeRes.segments.map(s => s.iri_value)),
+                avgSpeed: computeRes.segments.reduce((acc, seg) => acc + seg.mean_speed, 0) / computeRes.segments.length,
+                totalDistance: computeRes.segments[computeRes.segments.length - 1].distance_end,
+                totalSegments: computeRes.total_segments
+              }
+            } : f
+          ));
+          successCount++;
+          console.log(`✓ ${file.filename} recalculated successfully`);
         } else {
-          console.warn(`Failed to recalculate ${file.filename}: ${computeRes.message}`);
-          updatedFiles.push(file); // Keep original on failure
+          console.warn(`✗ Failed to recalculate ${file.filename}: ${computeRes.message}`);
         }
       } catch (e) {
-        console.error(`Failed to recalculate IRI for ${file.filename}:`, e);
-        updatedFiles.push(file); // Keep original on failure
+        console.error(`✗ Error recalculating ${file.filename}:`, e);
+        // Stop on network error (likely OOM crash)
+        if (e.message?.includes('Network') || e.code === 'ERR_NETWORK') {
+          console.error('Server may have crashed. Stopping recalculation.');
+          alert(`Server error after ${successCount} file(s). Please wait and try again.`);
+          break;
+        }
       }
     }
 
-    setIriFiles(updatedFiles);
     setIsRecalculating(false);
+    if (successCount === visibleFiles.length) {
+      console.log(`All ${successCount} files recalculated successfully!`);
+    }
   };
 
   // Handle slider change with debounce for smooth interaction
@@ -326,6 +345,54 @@ const Sidebar = () => {
   // Trigger recalculation when slider is released (not during drag)
   const handleSegmentLengthCommit = () => {
     recalculateAllIri(segmentLength);
+  };
+
+  // Per-file segment length editing
+  const [editingSegmentFile, setEditingSegmentFile] = useState(null); // ID of file being edited
+  const [editSegmentLength, setEditSegmentLength] = useState(100); // Temp value during editing
+
+  // Recalculate IRI for a SINGLE file (safer for large files)
+  const recalculateSingleIri = async (fileId, newSegmentLength) => {
+    const file = iriFiles.find(f => f.id === fileId);
+    if (!file) return;
+
+    setIsRecalculating(true);
+
+    try {
+      console.log(`Recalculating ${file.filename} with ${newSegmentLength}m segments...`);
+
+      const computeRes = await fileService.computeIRI(file.filename, newSegmentLength);
+      if (computeRes.success) {
+        // Update the specific file in the array
+        // Note: Zustand doesn't support callback pattern, so we read current state
+        const updatedFiles = iriFiles.map(f =>
+          f.id === fileId ? {
+            ...f,
+            segmentLength: newSegmentLength,
+            segments: computeRes.segments,
+            raw_data: computeRes.raw_data,
+            filtered_data: computeRes.filtered_data,
+            stats: {
+              averageIri: computeRes.segments.reduce((acc, seg) => acc + seg.iri_value, 0) / computeRes.segments.length,
+              maxIri: Math.max(...computeRes.segments.map(s => s.iri_value)),
+              avgSpeed: computeRes.segments.reduce((acc, seg) => acc + seg.mean_speed, 0) / computeRes.segments.length,
+              totalDistance: computeRes.segments[computeRes.segments.length - 1].distance_end,
+              totalSegments: computeRes.total_segments
+            }
+          } : f
+        );
+        setIriFiles(updatedFiles);
+        console.log(`✓ ${file.filename} recalculated at ${newSegmentLength}m`);
+      } else {
+        alert(`Failed: ${computeRes.message}`);
+      }
+    } catch (e) {
+      console.error(`Error:`, e);
+      alert(`Server error. Try again in a moment.`);
+    }
+
+    setIsRecalculating(false);
+    setEditingSegmentFile(null);
   };
 
   // Sync Pothole Files to Map Layer
@@ -904,27 +971,75 @@ const Sidebar = () => {
                           onChange={() => toggleIriFile(file.id)}
                           className="h-3 w-3 text-blue-600 rounded focus:ring-blue-500 mr-2"
                         />
-                        <span className="text-xs font-medium text-gray-700 truncate w-24" title={file.filename}>
+                        <span className="text-xs font-medium text-gray-700 truncate w-20" title={file.filename}>
                           {file.filename}
                         </span>
                       </div>
-                      {deleteConfirm === file.id ? (
+                      <div className="flex items-center gap-1">
+                        {/* Segment Length Badge - Click to Edit */}
                         <button
-                          onClick={(e) => handleDeleteIri(file.id, e)}
-                          className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded hover:bg-red-600 transition-colors"
+                          onClick={() => { setEditingSegmentFile(file.id); setEditSegmentLength(file.segmentLength || 100); }}
+                          className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded hover:bg-green-200 transition-colors"
+                          title="Click to change segment length"
+                          disabled={isRecalculating}
                         >
-                          Confirm
+                          {file.segmentLength || 100}m
                         </button>
-                      ) : (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setDeleteConfirm(file.id); setTimeout(() => setDeleteConfirm(null), 3000); }}
-                          className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                          title="Delete file"
-                        >
-                          <Trash size={12} />
-                        </button>
-                      )}
+                        {deleteConfirm === file.id ? (
+                          <button
+                            onClick={(e) => handleDeleteIri(file.id, e)}
+                            className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded hover:bg-red-600 transition-colors"
+                          >
+                            Confirm
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm(file.id); setTimeout(() => setDeleteConfirm(null), 3000); }}
+                            className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                            title="Delete file"
+                          >
+                            <Trash size={12} />
+                          </button>
+                        )}
+                      </div>
                     </div>
+
+                    {/* Per-file Segment Length Editor */}
+                    {editingSegmentFile === file.id && (
+                      <div className="bg-green-50 border border-green-200 rounded p-2 mb-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] font-medium text-gray-700">Segment Length</span>
+                          <button onClick={() => setEditingSegmentFile(null)} className="text-gray-400 hover:text-gray-600">
+                            <X size={12} />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] text-gray-500">25m</span>
+                          <input
+                            type="range"
+                            min="25"
+                            max="500"
+                            step="25"
+                            value={editSegmentLength}
+                            onChange={(e) => setEditSegmentLength(parseInt(e.target.value, 10))}
+                            className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-500"
+                            disabled={isRecalculating}
+                          />
+                          <span className="text-[9px] text-gray-500">500m</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-xs font-bold text-green-600">{editSegmentLength}m</span>
+                          <button
+                            onClick={() => recalculateSingleIri(file.id, editSegmentLength)}
+                            disabled={isRecalculating}
+                            className="bg-green-500 text-white text-[10px] px-2 py-1 rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isRecalculating ? 'Processing...' : 'Apply'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-1 text-[10px] text-gray-500">
                       <div>Avg IRI: <span className="font-semibold">{file.stats.averageIri.toFixed(2)}</span></div>
                       <div>Max IRI: <span className="font-semibold">{file.stats.maxIri.toFixed(2)}</span></div>
@@ -936,40 +1051,7 @@ const Sidebar = () => {
               </div>
             )}
 
-            {/* IRI Segment Length Slider - Global Setting */}
-            {activeLayers.iri && iriFiles.length > 0 && (
-              <div className="mt-3 ml-4 pl-2 border-l-2 border-green-200 bg-gradient-to-r from-green-50 to-transparent rounded-r-lg py-2 pr-2">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-gray-700">Segment Length</span>
-                  <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
-                    {segmentLength}m
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-gray-500">25m</span>
-                  <input
-                    type="range"
-                    min="25"
-                    max="500"
-                    step="25"
-                    value={segmentLength}
-                    onChange={handleSegmentLengthChange}
-                    onMouseUp={handleSegmentLengthCommit}
-                    onTouchEnd={handleSegmentLengthCommit}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-500"
-                    disabled={isRecalculating}
-                  />
-                  <span className="text-[10px] text-gray-500">500m</span>
-                </div>
-                {isRecalculating && (
-                  <div className="flex items-center mt-1 text-[10px] text-green-600">
-                    <div className="animate-spin w-3 h-3 border-2 border-green-500 border-t-transparent rounded-full mr-1"></div>
-                    Recalculating...
-                  </div>
-                )}
-                <p className="text-[9px] text-gray-400 mt-1">Distance per segment for IRI calculation</p>
-              </div>
-            )}
+            {/* Global segment length slider removed - now using per-file editing */}
           </div>
         </div>
       </div>
