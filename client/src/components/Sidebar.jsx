@@ -265,6 +265,59 @@ const Sidebar = () => {
   const [isRestoring, setIsRestoring] = useState(true); // Track initial data loading
   const [restoreError, setRestoreError] = useState(null); // Track loading errors
 
+  // IRI Segment Length Configuration (global setting)
+  const [segmentLength, setSegmentLength] = useState(100); // Default 100m
+  const [isRecalculating, setIsRecalculating] = useState(false);
+
+  // Recalculate IRI for all loaded files when segment length changes
+  const recalculateAllIri = async (newSegmentLength) => {
+    if (iriFiles.length === 0) return;
+
+    setIsRecalculating(true);
+    const updatedFiles = [];
+
+    for (const file of iriFiles) {
+      try {
+        // Force recompute with new segment length
+        const computeRes = await fileService.computeIRI(file.filename, newSegmentLength);
+        if (computeRes.success) {
+          updatedFiles.push({
+            ...file,
+            segments: computeRes.segments,
+            raw_data: computeRes.raw_data,
+            filtered_data: computeRes.filtered_data,
+            stats: {
+              averageIri: computeRes.segments.reduce((acc, seg) => acc + seg.iri_value, 0) / computeRes.segments.length,
+              maxIri: Math.max(...computeRes.segments.map(s => s.iri_value)),
+              avgSpeed: computeRes.segments.reduce((acc, seg) => acc + seg.mean_speed, 0) / computeRes.segments.length,
+              totalDistance: computeRes.segments[computeRes.segments.length - 1].distance_end,
+              totalSegments: computeRes.total_segments
+            }
+          });
+        } else {
+          updatedFiles.push(file); // Keep original on failure
+        }
+      } catch (e) {
+        console.error(`Failed to recalculate IRI for ${file.filename}:`, e);
+        updatedFiles.push(file); // Keep original on failure
+      }
+    }
+
+    setIriFiles(updatedFiles);
+    setIsRecalculating(false);
+  };
+
+  // Handle slider change with debounce for smooth interaction
+  const handleSegmentLengthChange = (e) => {
+    const newValue = parseInt(e.target.value, 10);
+    setSegmentLength(newValue);
+  };
+
+  // Trigger recalculation when slider is released (not during drag)
+  const handleSegmentLengthCommit = () => {
+    recalculateAllIri(segmentLength);
+  };
+
   // Sync Pothole Files to Map Layer
   useEffect(() => {
     const activeMarkers = potholeFiles
@@ -870,6 +923,41 @@ const Sidebar = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* IRI Segment Length Slider - Global Setting */}
+            {activeLayers.iri && iriFiles.length > 0 && (
+              <div className="mt-3 ml-4 pl-2 border-l-2 border-green-200 bg-gradient-to-r from-green-50 to-transparent rounded-r-lg py-2 pr-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-gray-700">Segment Length</span>
+                  <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                    {segmentLength}m
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-gray-500">25m</span>
+                  <input
+                    type="range"
+                    min="25"
+                    max="500"
+                    step="25"
+                    value={segmentLength}
+                    onChange={handleSegmentLengthChange}
+                    onMouseUp={handleSegmentLengthCommit}
+                    onTouchEnd={handleSegmentLengthCommit}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-500"
+                    disabled={isRecalculating}
+                  />
+                  <span className="text-[10px] text-gray-500">500m</span>
+                </div>
+                {isRecalculating && (
+                  <div className="flex items-center mt-1 text-[10px] text-green-600">
+                    <div className="animate-spin w-3 h-3 border-2 border-green-500 border-t-transparent rounded-full mr-1"></div>
+                    Recalculating...
+                  </div>
+                )}
+                <p className="text-[9px] text-gray-400 mt-1">Distance per segment for IRI calculation</p>
               </div>
             )}
           </div>

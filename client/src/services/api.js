@@ -139,9 +139,11 @@ export const fileService = {
         }
     },
 
-    computeIRI: async (filename) => {
+    computeIRI: async (filename, segmentLength = 100) => {
         try {
-            const response = await api.post(`/iri/compute/${filename}`);
+            const response = await api.post(`/iri/compute/${filename}`, {
+                segment_length: segmentLength
+            });
             return response.data;
         } catch (error) {
             console.error('IRI computation error:', error);
