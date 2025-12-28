@@ -141,12 +141,8 @@ export const fileService = {
 
     computeIRI: async (filename, segmentLength = 100) => {
         try {
-            // Use query parameters and remove Content-Type header to avoid CORS preflight
-            const response = await api.post(
-                `/iri/compute/${filename}?segment_length=${segmentLength}`,
-                null,  // No body
-                { headers: { 'Content-Type': undefined } }  // Remove default Content-Type
-            );
+            // Use GET request to avoid CORS preflight entirely
+            const response = await api.get(`/iri/compute/${filename}?segment_length=${segmentLength}`);
             return response.data;
         } catch (error) {
             console.error('IRI computation error:', error);

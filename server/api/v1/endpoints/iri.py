@@ -21,7 +21,7 @@ router = APIRouter()
 iri_service = IRIService()
 file_handler = FileHandler()
 
-@router.post("/compute/{filename}", response_model=IRIComputationResponse)
+@router.get("/compute/{filename}", response_model=IRIComputationResponse)
 async def compute_iri(
     filename: str,
     segment_length: int = Query(default=100, ge=25, le=500, description="Segment length in meters"),
@@ -31,7 +31,7 @@ async def compute_iri(
 ):
     """
     Compute IRI values for an uploaded file.
-    - All users can view shared data (read-only for non-admins)
+    Uses GET to avoid CORS preflight issues.
     """
     try:
         # 1. Find the file in the database - ALL users see shared data
