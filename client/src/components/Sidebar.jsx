@@ -270,14 +270,23 @@ const Sidebar = () => {
   const [isRecalculating, setIsRecalculating] = useState(false);
 
   // Recalculate IRI for all loaded files when segment length changes
+  // Uses delays between files to allow backend GC and prevent OOM
   const recalculateAllIri = async (newSegmentLength) => {
     if (iriFiles.length === 0) return;
 
     setIsRecalculating(true);
     const updatedFiles = [];
+    const DELAY_BETWEEN_FILES = 3000; // 3 seconds to allow backend GC
 
-    for (const file of iriFiles) {
+    for (let i = 0; i < iriFiles.length; i++) {
+      const file = iriFiles[i];
+
       try {
+        // Add delay between files (not before first one)
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_FILES));
+        }
+
         // Force recompute with new segment length
         const computeRes = await fileService.computeIRI(file.filename, newSegmentLength);
         if (computeRes.success) {
@@ -295,6 +304,7 @@ const Sidebar = () => {
             }
           });
         } else {
+          console.warn(`Failed to recalculate ${file.filename}: ${computeRes.message}`);
           updatedFiles.push(file); // Keep original on failure
         }
       } catch (e) {
