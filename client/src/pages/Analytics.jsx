@@ -15,6 +15,49 @@ const Analytics = () => {
 
     // --- Data Aggregation Logic ---
 
+
+
+    // Helper for Quality Assessment
+    const getQualityAssessment = (iri_value) => {
+        if (iri_value <= 3) {
+            return {
+                rating: 'Good',
+                color: 'text-green-700 bg-green-50 border-green-200',
+                badge: 'bg-green-100 text-green-700',
+                description: 'Acceptable pavement condition',
+                interpretation: 'This pavement provides good ride quality with acceptable smoothness. Vehicle operating costs are within normal range and user comfort is satisfactory.',
+                recommendations: 'Condition with routine maintenance activities. Monitor condition annually and apply preventive treatments as needed to maintain current service level.'
+            };
+        } else if (iri_value <= 5) {
+            return {
+                rating: 'Fair',
+                color: 'text-yellow-700 bg-yellow-50 border-yellow-200',
+                badge: 'bg-yellow-100 text-yellow-700',
+                description: 'Moderate pavement roughness',
+                interpretation: 'This pavement shows moderate roughness that begins to affect ride quality. Some increase in vehicle operating costs and minor user discomfort may be experienced.',
+                recommendations: 'Plan for rehabilitation treatments within 3-5 years. Consider surface treatments or minor structural improvements to prevent further deterioration.'
+            };
+        } else if (iri_value <= 7) {
+            return {
+                rating: 'Poor',
+                color: 'text-orange-700 bg-orange-50 border-orange-200',
+                badge: 'bg-orange-100 text-orange-700',
+                description: 'Significant pavement deterioration',
+                interpretation: 'This pavement has significant roughness that notably impacts ride quality and increases vehicle operating costs. User comfort is compromised and maintenance costs are elevated.',
+                recommendations: 'Prioritize major rehabilitation or reconstruction within 2-3 years. Implement interim maintenance to prevent further rapid deterioration and safety issues.'
+            };
+        } else {
+            return {
+                rating: 'Bad',
+                color: 'text-red-700 bg-red-50 border-red-200',
+                badge: 'bg-red-100 text-red-700',
+                description: 'Severe pavement distress',
+                interpretation: 'This pavement exhibits severe roughness causing substantial user discomfort, high vehicle operating costs, and potential safety concerns. Structural integrity may be compromised.',
+                recommendations: 'Immediate major rehabilitation or full reconstruction required. Consider emergency repairs if safety is compromised. Evaluate load restrictions until permanent repairs are completed.'
+            };
+        }
+    };
+
     // 1. IRI Aggregation
     const iriAnalytics = useMemo(() => {
         if (!iriFiles || iriFiles.length === 0) return null;
@@ -288,6 +331,46 @@ const Analytics = () => {
                                                         <Line type="monotone" dataKey="iri_value" stroke="#2563eb" strokeWidth={2} name="IRI Value" dot={false} />
                                                     </LineChart>
                                                 </ResponsiveContainer>
+                                            </div>
+                                        </div>
+
+                                        {/* Quality Assessment Section */}
+                                        <div className="space-y-4">
+                                            <h3 className="text-lg font-bold text-gray-900">Quality Assessment</h3>
+                                            <div className="grid grid-cols-1 gap-4">
+                                                {iriFiles.filter(f => f.visible).map(file => {
+                                                    const assessment = getQualityAssessment(file.stats.averageIri);
+                                                    return (
+                                                        <div key={file.id} className={`p-6 rounded-xl border ${assessment.color} transition-all`}>
+                                                            <div className="flex items-start justify-between mb-4">
+                                                                <div>
+                                                                    <h4 className="text-lg font-bold flex items-center gap-3">
+                                                                        {file.filename}
+                                                                        <span className={`text-xs px-2 py-1 rounded-full font-bold uppercase ${assessment.badge}`}>
+                                                                            {assessment.rating}
+                                                                        </span>
+                                                                    </h4>
+                                                                    <p className="opacity-90 mt-1 font-medium">{assessment.description}</p>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <div className="text-3xl font-bold">{file.stats.averageIri.toFixed(2)}</div>
+                                                                    <div className="text-xs opacity-75 uppercase font-bold tracking-wider">Average IRI</div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4 pt-4 border-t border-black/5">
+                                                                <div>
+                                                                    <h5 className="text-sm font-bold uppercase tracking-wider mb-2 opacity-75">Interpretation</h5>
+                                                                    <p className="text-sm leading-relaxed opacity-90">{assessment.interpretation}</p>
+                                                                </div>
+                                                                <div>
+                                                                    <h5 className="text-sm font-bold uppercase tracking-wider mb-2 opacity-75">Recommendations</h5>
+                                                                    <p className="text-sm leading-relaxed opacity-90">{assessment.recommendations}</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     </>
