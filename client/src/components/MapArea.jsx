@@ -115,7 +115,7 @@ const MapArea = () => {
                             if (seg.start_lat && seg.start_lon && seg.end_lat && seg.end_lon) {
                                 return (
                                     <Polyline
-                                        key={`iri-${file.id}-${idx}`}
+                                        key={`iri-${file.id}-${file.segmentLength || 'default'}-${idx}-${seg.iri_value}`}
                                         positions={[
                                             [seg.start_lat, seg.start_lon],
                                             [seg.end_lat, seg.end_lon]
